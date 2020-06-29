@@ -15,6 +15,7 @@ setup(
         "numpy >= 1.6.1",
         "scipy >= 0.15.0",
         "matplotlib >= 1.1.0",
-        "tables >= 2.3"
+        "tables >= 2.3",
+        "imageio >= 2.8.0"
     ],
 )
