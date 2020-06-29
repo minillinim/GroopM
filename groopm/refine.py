@@ -1266,7 +1266,7 @@ class RefineEngine:
                     nones[old_bid] = 1
 
 
-    if False:
+        if False:
             print("    ------------------------------------------------------")
             print("     BID    ORIG    CHGE    SAME    NEWS    NONE    TOTAL")
             print("    ------------------------------------------------------")
