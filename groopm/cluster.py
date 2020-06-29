@@ -77,7 +77,7 @@ from numpy import (abs as np_abs,
 from numpy.linalg import norm as np_norm
 import scipy.ndimage as ndi
 from scipy.spatial.distance import pdist, squareform, cityblock, euclidean
-from scipy.misc import imsave
+import imageio
 
 # GroopM imports
 from .profileManager import ProfileManager
@@ -1527,7 +1527,9 @@ class HoughPartitioner:
             accumulator /= np_max(accumulator)
             accumulator *= 255
 
-            imsave("%d_%s_%s_%d.png" % (self.hc, imgTag, side, level), np_concatenate([accumulator,fff]))
+            imageio.imwrite(
+                "%d_%s_%s_%d.png" % (self.hc, imgTag, side, level),
+                np_concatenate([accumulator,fff]))
 
         # see which points lie on the line
         # we need to protect against the data line crossing
