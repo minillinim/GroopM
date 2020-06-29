@@ -37,7 +37,6 @@ __current_GMDB_version__ = 5
 
 from sys import exc_info
 from os.path import splitext as op_splitext, basename as op_basename
-from string import maketrans as s_maketrans
 
 import tables
 import numpy as np
@@ -1619,7 +1618,7 @@ class KmerSigEngine:
     """Simple class for determining kmer signatures"""
     def __init__(self, kLen=4):
         self.kLen = kLen
-        self.compl = s_maketrans('ACGT', 'TGCA')
+        self.compl = str.maketrans('ACGT', 'TGCA')
         (self.kmerCols, self.llDict) = self.makeKmerColNames(makeLL=True)
         self.numMers = len(self.kmerCols)
 
@@ -1654,7 +1653,7 @@ class KmerSigEngine:
     def getGC(self, seq):
         """Get the GC of a sequence"""
         Ns = seq.count('N') + seq.count('n')
-        compl = s_maketrans('ACGTacgtnN', '0110011000')
+        compl = str.maketrans('ACGTacgtnN', '0110011000')
         return sum([float(x) for x in list(seq.translate(compl))])/float(len(seq) - Ns)
 
     def shiftLowLexi(self, seq):

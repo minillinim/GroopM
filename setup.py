@@ -1,8 +1,8 @@
-from setuptools import setup 
+from setuptools import setup
 
 setup(
     name='GroopM',
-    version='0.3.5',
+    version='2.0.0',
     author='Michael Imelfort',
     author_email='mike@mikeimelfort.com',
     packages=['groopm'],

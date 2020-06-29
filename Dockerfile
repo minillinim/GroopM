@@ -1,4 +1,4 @@
-FROM python:3.8.3-buster
+FROM bamm:latest
 
 RUN \
      python3 -m pip install --upgrade pip \
