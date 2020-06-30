@@ -135,7 +135,7 @@ if __name__ == '__main__':
                                         description='Parse raw data and save to disk')
     file_parser.add_argument('dbname', help="name of the database being created")
     file_parser.add_argument('reference', help="fasta file containing bam reference sequences")
-    file_parser.add_argument('bamfiles', nargs='+', help="bam files to parse")
+    file_parser.add_argument('covfile', help="pre-parsed coverages from bam files")
     file_parser.add_argument('-t', '--threads', type=int, default=1, help="number of threads to use during BAM parsing")
     file_parser.add_argument('-f', '--force', action="store_true", default=False, help="overwrite existing DB file without prompting")
     file_parser.add_argument('-c', '--cutoff', type=int, default=500, help="cutoff contig size during parsing")
@@ -190,11 +190,11 @@ if __name__ == '__main__':
  Extract contigs from bin 33:
 
   $ groopm extract my_db.gm my_contigs.fasta --bids 33
-  
+
  Extract reads mapping to contigs in bin 35:
-  
+
   $ groopm extract my_db.gm my.bam -bids 35 --mode reads
-  
+
 ''')
     bin_extractor.add_argument('dbname', help="name of the database to open")
     bin_extractor.add_argument('data', nargs='+', help="data file(s) to extract from, bam or fasta")
@@ -413,4 +413,3 @@ if __name__ == '__main__':
 ###############################################################################
 ###############################################################################
 ###############################################################################
-

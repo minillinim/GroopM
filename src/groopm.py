@@ -89,20 +89,26 @@ class GroopMOptionsParser():
             print("*******************************************************************************")
             print(" [[GroopM %s]] Running in data parsing mode..." % self.GMVersion)
             print("*******************************************************************************")
-            # check this here:
-            if len(options.bamfiles) < 3:
-                print("Sorry, You must supply at least 3 bamFiles to use GroopM. (You supplied %d)\n Exiting..." % len(options.bamfiles))
-                return
+
             GMdata = mstore.GMDataManager()
-            success = GMdata.createDB(options.bamfiles,
-                                      options.reference,
-                                      options.dbname,
-                                      options.cutoff,
-                                      timer,
-                                      force=options.force,
-                                      threads=options.threads)
+
+            # check this here:
+            if not options.covfile:
+                print("Sorry, You must supply a pre-parsed coverages file to use GroopM.\n Exiting...")
+                return
+
+            success = GMdata.createDB(
+                options.covfile,
+                options.reference,
+                options.dbname,
+                options.cutoff,
+                timer,
+                force=options.force,
+                threads=options.threads)
+
             if not success:
                 print(options.dbname,"not updated")
+
 
         elif(options.subparser_name == 'core'):
             # make bin cores

@@ -3,3 +3,5 @@ build/
 dist/
 groopm/*.pyc
 pip-log.txt
+GroopM.egg-info/
+__pycache__
