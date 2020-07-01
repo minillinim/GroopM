@@ -117,8 +117,7 @@ class BinManager:
                  loadContigLengths=True,
                  loadLinks=False,
                  loadContigNames=True,
-                 cutOff=0,
-                 transform=True):
+                 cutOff=0):
         """Load data and make bin objects"""
         # build the condition
 
@@ -156,14 +155,6 @@ class BinManager:
             return
 
         if(makeBins):
-            if transform:
-                self.PM.transformCP(timer, silent=silent)
-            else:
-                if self.PM.numStoits == 3:
-                    self.PM.transformedCP = self.PM.covProfiles
-                else:
-                    print("Number of stoits != 3. You need to transform")
-                    self.PM.transformCP(timer, silent=silent)
             if not silent:
                 print("    Making bin objects")
             self.makeBins(self.getBinMembers())
@@ -1495,14 +1486,12 @@ class BinManager:
         plt.close(fig)
         del fig
 
-    def plotStoitNames(self, ax):
-        """Plot stoit names on an existing axes"""
-        self.PM.plotStoitNames(ax)
-
     def plotBinIds(self, gc_range=None, ignoreRanges=False, showChimeric=False):
         """Render 3d image of core ids"""
-        (bin_centroid_points, bin_centroid_colors, _bin_centroid_gc, bids) = self.findCoreCentres(gc_range=gc_range,
-                                                                                                  processChimeric=showChimeric)
+        (bin_centroid_points, bin_centroid_colors, _bin_centroid_gc, bids) = self.findCoreCentres(
+            gc_range=gc_range,
+            processChimeric=showChimeric)
+
         fig = plt.figure()
         ax = fig.gca(projection='3d')
         ax.set_xlabel('x coverage')
@@ -1526,7 +1515,6 @@ class BinManager:
             ax.set_zlim3d(0, mm[2])
 
         else:
-            self.plotStoitNames(ax)
             ax.set_xlim3d(0, 1000)
             ax.set_ylim3d(0, 1000)
             ax.set_zlim3d(0, 1000)
@@ -1560,7 +1548,6 @@ class BinManager:
         ax.set_zlabel('z coverage')
 
         if not ignoreRanges:
-            self.plotStoitNames(ax)
             ax.set_xlim3d(0, 1000)
             ax.set_ylim3d(0, 1000)
             ax.set_zlim3d(0, 1000)
