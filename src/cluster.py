@@ -176,18 +176,6 @@ class ClusterEngine:
         self.PM.loadData(self.timer, "length >= "+str(coreCut))
         print("    %s" % self.timer.getTimeStamp())
 
-        # transform the data
-        print("    Loading transformed data")
-        self.PM.transformCP(self.timer)
-        # plot the transformed space (if we've been asked to...)
-        #if(self.debugPlots >= 3):
-        #    self.PM.renderTransCPData()
-
-        # now we can make this guy
-        self.TSpan = np_mean([np_norm(self.PM.corners[i] - self.PM.TCentre) for i in range(self.PM.numStoits)])
-
-        print("    %s" % self.timer.getTimeStamp())
-
         # cluster and bin!
         print("Create cores")
         self.initialiseCores(kmerThreshold, coverageThreshold)

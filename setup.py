@@ -12,10 +12,13 @@ setup(
     description='Metagenomic binning suite',
     long_description=open('README.txt').read(),
     install_requires=[
-        "numpy >= 1.6.1",
-        "scipy >= 0.15.0",
-        "matplotlib >= 1.1.0",
-        "tables >= 2.3",
-        "imageio >= 2.8.0"
+        'numpy >= 1.6.1',
+        'scipy >= 0.15.0',
+        'sklearn',
+        'pandas >= 1.0.3',
+        'matplotlib >= 1.1.0',
+        'tables >= 2.3',
+        'imageio >= 2.8.0',
+        'umap-learn >= 0.4.5'
     ],
 )

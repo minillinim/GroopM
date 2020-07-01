@@ -261,13 +261,11 @@ class GroopMOptionsParser():
             print("*******************************************************************************")
             print(" [[GroopM %s]] Running in bin '%s' explorer mode..." % (self.GMVersion, options.mode))
             print("*******************************************************************************")
-            transform=True^options.no_transform
             bids = []
             if options.bids is not None:
                 bids = options.bids
             BE = groopmUtils.BinExplorer(options.dbname,
                                          bids=bids,
-                                         transform=transform,
                                          cmstring=options.cm,
                                          ignoreContigLengths=options.points)
             if(options.mode == 'binpoints'):
@@ -301,7 +299,6 @@ class GroopMOptionsParser():
                 bids = options.bids
             BE = groopmUtils.BinExplorer(options.dbname,
                                          bids=bids,
-                                         transform=True,
                                          ignoreContigLengths=options.points)
             BE.plotFlyOver(timer,
                            fps=options.fps,
@@ -353,7 +350,7 @@ class GroopMOptionsParser():
 
             # prep fields. Do this first cause users are mot likely to
             # mess this part up!
-            allowable_fields = ['names', 'mers', 'gc', 'coverage', 'tcoverage', 'ncoverage', 'lengths', 'bins', 'all']
+            allowable_fields = ['names', 'mers', 'svds', 'gc', 'coverage', 'tcoverage', 'ncoverage', 'lengths', 'bins', 'all']
             fields = options.fields.split(',')
             for field in fields:
                 if field not in allowable_fields:

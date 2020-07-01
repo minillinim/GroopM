@@ -74,27 +74,30 @@ class GMDataManager:
     'stoit3' : tables.FloatCol(pos=2)
     ...
 
+    ------------------------
+     TRANSFORMATIONS
+     group = '/transforms'
+    ------------------------
+
     **Transformed coverage profile**
     table = 'transCoverage'
     'x' : tables.FloatCol(pos=0)
     'y' : tables.FloatCol(pos=1)
     'z' : tables.FloatCol(pos=2)
 
+    **Transformed coverage corners**
+    table = 'transCoverageCorners'
+    'x' : tables.FloatCol(pos=0)
+    'y' : tables.FloatCol(pos=1)
+    'z' : tables.FloatCol(pos=2)
+
+    **Transformed kmerSigs**
+    table = 'transkmers'
+    'svd' : tables.FloatCol(pos=0)
+
     **Normalised coverage profile**
     table = 'normCoverage'
     'normCov' : tables.FloatCol(pos=0)
-
-    ------------------------
-     LINKS
-    group = '/links'
-    ------------------------
-    ** Links **
-    table = 'links'
-    'contig1'    : tables.Int32Col(pos=0)            # reference to index in meta/contigs
-    'contig2'    : tables.Int32Col(pos=1)            # reference to index in meta/contigs
-    'numReads'   : tables.Int32Col(pos=2)            # number of reads supporting this link
-    'linkType'   : tables.Int32Col(pos=3)            # the type of the link (SS, SE, ES, EE)
-    'gap'        : tables.Int32Col(pos=4)            # the estimated gap between the contigs
 
     ------------------------
      METADATA
@@ -125,12 +128,6 @@ class GMDataManager:
     'bid'        : tables.Int32Col(pos=0)
     'numMembers' : tables.Int32Col(pos=1)
     'isLikelyChimeric' : tables.BoolCol(pos=2)
-
-    **Transformed coverage corners**
-    table = 'transCoverageCorners'
-    'x' : tables.FloatCol(pos=0)
-    'y' : tables.FloatCol(pos=1)
-    'z' : tables.FloatCol(pos=2)
 
     """
     def __init__(self): pass
@@ -175,7 +172,7 @@ class GMDataManager:
                 # Create groups under "/" (root) for storing profile information and metadata
                 profile_group = h5file.create_group('/', 'profile', 'Assembly profiles')
                 meta_group = h5file.create_group('/', 'meta', 'Associated metadata')
-                links_group = h5file.create_group('/', 'links', 'Paired read link information')
+                transforms_group = h5file.create_group('/', 'transforms', 'Transformed profiles')
 
                 #------------------------
                 # parse contigs
@@ -188,40 +185,6 @@ class GMDataManager:
                 # Before writing to the database we need to make sure that none of them have
                 # 0 coverage @ all stoits.
                 #------------------------
-
-                # load coverages into a dataframe
-                coverages = pd.read_csv(
-                    coverage_file,
-                    compression='gzip',
-                    index_col='contig',
-                    sep='\t')
-                coverages = coverages.drop(['Length'], axis=1)
-
-                cnames = list(coverages.index)
-
-                stoit_col_names = np.array([
-                    name.replace('.bam', '').replace('.', '_') for name in coverages.columns])
-
-                coverages_df = pd.DataFrame(
-                    columns=stoit_col_names,
-                    index=cnames)
-
-                num_stoits = len(stoit_col_names)
-                zero_cov_cnames = []
-                covered_cnames = []
-                for cname in cnames:
-                    try:
-                        coverages_df.loc[cname] = coverages.loc[cname]
-                        covered_cnames.append(cname)
-                    except KeyError:
-                        zero_cov_cnames.append(cname)
-
-                norm_coverages_df = coverages_df.apply(np.linalg.norm, axis=1).to_frame()
-
-                print(coverages_df.loc['UTIG00000002'])
-                exit(0)
-
-
                 import mimetypes
                 GM_open = open
                 open_mode = 'r'
@@ -244,6 +207,21 @@ class GMDataManager:
                         print('Error parsing contigs')
                         raise
 
+                # load coverages into a dataframe
+                coverages = pd.read_csv(
+                    coverage_file,
+                    compression='gzip',
+                    index_col='contig',
+                    sep='\t')
+                coverages_df = coverages.drop(['Length'], axis=1)
+
+                stoit_col_names = np.array([
+                    name.replace('.bam', '').replace('.', '_') for name in coverages_df.columns])
+                num_stoits = len(stoit_col_names)
+
+                covered_cnames = list(coverages_df.index)
+                zero_cov_cnames = list(set(cnames) - set(covered_cnames))
+
                 if len(zero_cov_cnames) > 0:
                     # report the bad contigs to the user
                     # and strip them before writing to the DB
@@ -257,14 +235,14 @@ class GMDataManager:
                       print('(+ %d additional contigs)' % (len(zero_cov_cnames)-5))
                     print("****************************************************************")
 
-                    cnames = covered_cnames
                     contigs_df = contigs_df.drop(zero_cov_cnames, axis=0)
                     ksigs_df = ksigs_df.drop(zero_cov_cnames, axis=0)
-                    coverages_df = coverages_df.drop(zero_cov_cnames, axis=0)
 
+                cnames = covered_cnames
                 num_contigs = len(cnames)
+                norm_coverages_df = coverages_df.apply(np.linalg.norm, axis=1).to_frame()
 
-                # kmer sigs
+                # raw kmer sigs
                 ksig_db_desc = [(mer, float) for mer in kse.kmer_cols]
                 try:
                     h5file.create_table(
@@ -294,11 +272,41 @@ class GMDataManager:
                     print("Error creating coverage table:", exc_info()[0])
                     raise
 
+                # transformed coverages
+                trans_cov_db_desc = [('x', float), ('y', float), ('z', float)]
+                import umap
+                from sklearn import preprocessing
+                min_max_scaler = preprocessing.MinMaxScaler()
+                coverages_scaled = min_max_scaler.fit_transform(
+                    coverages_df.values)
+
+                umapd_coverages = np.array(umap.UMAP(
+                    n_neighbors=5,
+                    min_dist=0.3,
+                    n_components=3).fit_transform(coverages_scaled))
+
+                umapd_coverages -= umapd_coverages.min(axis=0)
+                umapd_coverages /= umapd_coverages.max(axis=0)
+                umapd_coverages = np.array(
+                    [tuple(i) for i in umapd_coverages],
+                    dtype=trans_cov_db_desc)
+
+                try:
+                    h5file.create_table(
+                        transforms_group,
+                        'transCoverage',
+                        umapd_coverages,
+                        title="Transformed coverage",
+                        expectedrows=num_contigs)
+                except:
+                    print("Error creating transformed coverage table:", exc_info()[0])
+                    raise
+
                 # normalised coverages
                 norm_coverage_db_desc = [('normCov', float)]
                 try:
                     h5file.create_table(
-                        profile_group,
+                        transforms_group,
                         'normCoverage',
                         np.array(
                             [tuple(i) for i in norm_coverages_df.to_numpy(dtype=float)],
@@ -309,9 +317,34 @@ class GMDataManager:
                     print("Error creating normalised coverage table:", exc_info()[0])
                     raise
 
-                #------------------------
-                # Add a table for the contigs
-                #------------------------
+                # SVD kmersigs
+                num_svds = 3
+                svd_ksigs_db_desc = []
+                for i in range(num_svds):
+                  svd_ksigs_db_desc.append(('svd%s'% (i+1), float))
+
+                from sklearn.decomposition import TruncatedSVD
+                ksigs_svd = np.array(TruncatedSVD(
+                    n_components=num_svds,
+                    random_state=42).fit_transform(ksigs_df))
+                ksigs_svd -= ksigs_svd.min(axis=0)
+                ksigs_svd /= ksigs_svd.max(axis=0)
+                ksigs_svd = np.array(
+                    [tuple(i) for i in ksigs_svd],
+                    dtype=svd_ksigs_db_desc)
+
+                try:
+                    h5file.create_table(
+                        transforms_group,
+                        'ksvd',
+                        ksigs_svd,
+                        title='Kmer signature SVDs',
+                        expectedrows=num_contigs)
+                except:
+                    print("Error creating KMERVALS table:", exc_info()[0])
+                    raise
+
+                # contigs
                 contigs_db_desc = [
                     ('cid', '|S512'),
                     ('bid', int),
@@ -331,16 +364,12 @@ class GMDataManager:
                     print("Error creating CONTIG table:", exc_info()[0])
                     raise
 
-                #------------------------
-                # Add a table for the bins
-                #------------------------
+                # bins
                 self.initBinStats((h5file, meta_group))
 
                 print("    %s" % timer.getTimeStamp())
 
-                #------------------------
-                # Add metadata
-                #------------------------
+                # metadata
                 meta_data = (
                     str.join(',',stoit_col_names),
                     num_stoits,
@@ -422,10 +451,6 @@ class GMDataManager:
 
     def getConditionalIndices(self, db_file_name, condition='', silent=False, checkUpgrade=True):
         """return the indices into the db which meet the condition"""
-        # check the DB out and see if we need to change anything about it
-        if checkUpgrade:
-            self.checkAndUpgradeDB(db_file_name, silent=silent)
-
         if('' == condition):
             condition = "cid != ''" # no condition breaks everything!
         try:
@@ -449,18 +474,18 @@ class GMDataManager:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
 
-    def getTransformedCoverageProfiles(self, db_file_name, condition='', indices=np.array([])):
+    def getTransformedCoverageProfiles(self, dbFileName, condition='', indices=np.array([])):
         """Load transformed coverage profiles"""
         try:
-            with tables.open_file(db_file_name, mode='r') as h5file:
+            with tables.open_file(dbFileName, mode='r') as h5file:
                 if(np.size(indices) != 0):
-                    return np.array([list(h5file.root.profile.transCoverage[x]) for x in indices])
+                    return np.array([list(h5file.root.transforms.transCoverage[x]) for x in indices])
                 else:
                     if('' == condition):
                         condition = "cid != ''" # no condition breaks everything!
-                    return np.array([list(h5file.root.profile.transCoverage[x.nrow]) for x in h5file.root.meta.contigs.where(condition)])
+                    return np.array([list(h5file.root.transforms.transCoverage[x.nrow]) for x in h5file.root.meta.contigs.where(condition)])
         except:
-            print("Error opening DB:",db_file_name, exc_info()[0])
+            print("Error opening DB:",dbFileName, exc_info()[0])
             raise
 
     def getNormalisedCoverageProfiles(self, db_file_name, condition='', indices=np.array([])):
@@ -468,11 +493,11 @@ class GMDataManager:
         try:
             with tables.open_file(db_file_name, mode='r') as h5file:
                 if(np.size(indices) != 0):
-                    return np.array([list(h5file.root.profile.normCoverage[x]) for x in indices])
+                    return np.array([list(h5file.root.transforms.normCoverage[x]) for x in indices])
                 else:
                     if('' == condition):
                         condition = "cid != ''" # no condition breaks everything!
-                    return np.array([list(h5file.root.profile.normCoverage[x.nrow]) for x in h5file.root.meta.contigs.where(condition)])
+                    return np.array([list(h5file.root.transforms.normCoverage[x.nrow]) for x in h5file.root.meta.contigs.where(condition)])
         except:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
@@ -712,17 +737,22 @@ class GMDataManager:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
 
+    def getKmerSVDs(self, dbFileName, condition='', indices=np.array([])):
+        """Load kmer sig SVDs"""
+        try:
+            with tables.open_file(dbFileName, mode='r') as h5file:
+                if(np.size(indices) != 0):
+                    return np.array([list(h5file.root.transforms.ksvd[x]) for x in indices])
+                else:
+                    if('' == condition):
+                        condition = "cid != ''" # no condition breaks everything!
+                    return np.array([list(h5file.root.transforms.ksvd[x.nrow]) for x in h5file.root.meta.contigs.where(condition)])
+        except:
+            print("Error opening DB:",dbFileName, exc_info()[0])
+            raise
+
 #------------------------------------------------------------------------------
 # GET / SET METADATA
-
-    def getTransformedCoverageCorners(self, db_file_name):
-        """Load transformed coverage corners"""
-        try:
-            with tables.open_file(db_file_name, mode='r') as h5file:
-                return np.array([list(x) for x in h5file.root.meta.transCoverageCorners.read()])
-        except:
-            print("Error opening DB:",db_file_name, exc_info()[0])
-            raise
 
     def setMeta(self, h5file, metaData, overwrite=False):
         """Write metadata into the table
@@ -773,7 +803,11 @@ class GMDataManager:
         try:
             with tables.open_file(db_file_name, mode='r') as h5file:
                 # theres only one value
-                return h5file.root.meta.meta.read()[fieldName][0]
+                val = h5file.root.meta.meta.read()[fieldName][0]
+                try:
+                    return val.decode('utf-8')
+                except AttributeError:
+                    return val
         except:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
@@ -929,7 +963,7 @@ class GMDataManager:
         data_arrays = []
 
         if fields == ['all']:
-            fields = ['names', 'lengths', 'gc', 'bins', 'coverage', 'tcoverage', 'ncoverage', 'mers']
+            fields = ['names', 'lengths', 'gc', 'bins', 'coverage', 'tcoverage', 'ncoverage', 'mers', 'svds']
 
         num_fields = len(fields)
         data_converters = []
@@ -963,9 +997,9 @@ class GMDataManager:
                 data_converters.append(lambda x : separator.join(["%0.4f" % i for i in x]))
 
             elif field == 'tcoverage':
-                header_strings.append('transformedCoverageX')
-                header_strings.append('transformedCoverageY')
-                header_strings.append('transformedCoverageZ')
+                stoits = self.getStoitColNames(db_file_name).split(',')
+                for stoit in stoits:
+                    header_strings.append(stoit)
                 data_arrays.append(self.getTransformedCoverageProfiles(db_file_name))
                 data_converters.append(lambda x : separator.join(["%0.4f" % i for i in x]))
 
@@ -979,6 +1013,11 @@ class GMDataManager:
                 for mer in mers:
                     header_strings.append(mer)
                 data_arrays.append(self.getKmerSigs(db_file_name))
+                data_converters.append(lambda x : separator.join(["%0.4f" % i for i in x]))
+
+            elif field == 'svds':
+                header_strings = ['svd1', 'svd2', 'svd3']
+                data_arrays.append(self.getKmerSVDs(db_file_name))
                 data_converters.append(lambda x : separator.join(["%0.4f" % i for i in x]))
 
         try:
@@ -1063,227 +1102,3 @@ class ContigParser:
 ###############################################################################
 ###############################################################################
 ###############################################################################
-
-class CoverageTransformer(object):
-    """Transform coverage profiles GroopM-style"""
-
-    def __init__(self,
-                 numContigs,
-                 numStoits,
-                 normCoverages,
-                 kmerNormPC1,
-                 coverageProfiles,
-                 stoit_col_names,
-                 scaleFactor=1000):
-        self.numContigs = numContigs
-        self.numStoits = numStoits
-        self.normCoverages = normCoverages
-        self.kmerNormPC1 = kmerNormPC1
-        self.covProfiles = coverageProfiles
-        self.stoit_col_names = stoit_col_names
-        self.indices = list(range(self.numContigs))
-        self.scaleFactor = scaleFactor
-
-        # things we care about!
-        self.TCentre = None
-        self.transformedCP = np.zeros((self.numContigs,3))
-        self.corners = np.zeros((self.numStoits,3))
-
-    def transformCP(self, silent=False, nolog=False):
-        """Do the main transformation on the coverage profile data"""
-        shrinkFn = np.log10
-        if(nolog):
-            shrinkFn = lambda x:x
-
-        if(not silent):
-            print("    Reticulating splines")
-            print("    Dimensionality reduction")
-
-        unit_vectors = [(np.cos(i*2*np.pi/self.numStoits),np.sin(i*2*np.pi/self.numStoits)) for i in range(self.numStoits)]
-
-        # make sure the bams are ordered consistently
-        if self.numStoits > 3:
-            self.shuffleBAMs()
-
-        for i in range(len(self.indices)):
-            shifted_vector = np.array([0.0,0.0])
-            try:
-                flat_vector = (self.covProfiles[i] / sum(self.covProfiles[i]))
-            except FloatingPointError:
-                flat_vector = self.covProfiles[i]
-
-            for j in range(self.numStoits):
-                shifted_vector[0] += unit_vectors[j][0] * flat_vector[j]
-                shifted_vector[1] += unit_vectors[j][1] * flat_vector[j]
-
-            # log scale it towards the centre
-            scaling_vector = shifted_vector * self.scaleFactor
-            sv_size = np.linalg.norm(scaling_vector)
-            if sv_size > 1:
-                shifted_vector /= shrinkFn(sv_size)
-
-            self.transformedCP[i,0] = shifted_vector[0]
-            self.transformedCP[i,1] = shifted_vector[1]
-            # should always work cause we nuked
-            # all 0 coverage vecs in parse
-            self.transformedCP[i,2] = shrinkFn(self.normCoverages[i])
-
-        # finally scale the matrix to make it equal in all dimensions
-        min = np.amin(self.transformedCP, axis=0)
-        self.transformedCP -= min
-        max = np.amax(self.transformedCP, axis=0)
-        max = max / (self.scaleFactor-1)
-        self.transformedCP /= max
-
-        # get the corner points
-        XYcorners = np.reshape([i for i in np.array(unit_vectors)],
-                               (self.numStoits, 2))
-
-        for i in range(self.numStoits):
-            self.corners[i,0] = XYcorners[i,0]
-            self.corners[i,1] = XYcorners[i,1]
-
-        # shift the corners to match the space
-        self.corners -= min
-        self.corners /= max
-
-        # scale the corners to fit the plot
-        cmin = np.amin(self.corners, axis=0)
-        self.corners -= cmin
-        cmax = np.amax(self.corners, axis=0)
-        cmax = cmax / (self.scaleFactor-1)
-        self.corners[:,0] /= cmax[0]
-        self.corners[:,1] /= cmax[1]
-        for i in range(self.numStoits):
-            self.corners[i,2] = self.scaleFactor + 100 # only affect the z axis
-
-        self.TCentre = np.mean(self.corners, axis=0)
-
-    def small2indices(self, index, side):
-        """Return the indices of the comparative items
-        when given an index into a condensed distance matrix
-        """
-        step = 0
-        while index >= (side-step):
-            index = index - side + step
-            step += 1
-        return (step, step + index + 1)
-
-    def shuffleBAMs(self, ordering=None):
-        """Make the data transformation deterministic by reordering the bams"""
-        # As Ben pointed out. This is basically the travelling salesman.
-        if ordering is None:
-            # we will need to deduce the ordering of the contigs
-            # first we should make a subset of the total data
-            # we'd like to take it down to about 1500 or so RI's
-            # but we'd like to do this in a repeatable way
-            ideal_contig_num = 1500
-            sub_cons = np.arange(self.numContigs)
-            while len(sub_cons) > ideal_contig_num:
-                # select every second contig when sorted by norm cov
-                cov_sorted = np.argsort(self.normCoverages[sub_cons])
-                sub_cons = np.array([sub_cons[cov_sorted[i*2]] for i in np.arange(int(len(sub_cons)/2))])
-
-                if len(sub_cons) > ideal_contig_num:
-                    # select every second contig when sorted by mer PC1
-                    mer_sorted = np.argsort(self.kmerNormPC1[sub_cons])
-                    sub_cons = np.array([sub_cons[mer_sorted[i*2]] for i in np.arange(int(len(sub_cons)/2))])
-
-            # now that we have a subset, calculate the distance between each of the untransformed vectors
-            num_sc = len(sub_cons)
-
-            # log shift the coverages towards the origin
-            sub_covs = np.transpose([self.covProfiles[i]*(np.log10(self.normCoverages[i])/self.normCoverages[i]) for i in sub_cons])
-            sq_dists = cdist(sub_covs,sub_covs,'cityblock')
-            dists = squareform(sq_dists)
-
-            # we have an all vs all distance matrix. Time to do some dodgy optimization.
-            # For this case, we only require locally optimal paths. So we can get away with
-            # simply choosing the shortest edges in the list
-            # initialise a list of left, right neighbours
-            lr_dict = {}
-            for i in range(self.numStoits):
-                lr_dict[i] = []
-
-            too_big = 10000
-            while True:
-                closest = np.argmin(dists)
-                if dists[closest] == too_big:
-                    break
-                (i,j) = self.small2indices(closest, self.numStoits-1)
-                lr_dict[j].append(i)
-                lr_dict[i].append(j)
-
-                # mark these guys as neighbours
-                if len(lr_dict[i]) == 2:
-                    # no more than 2 neighbours
-                    sq_dists[i,:] = too_big
-                    sq_dists[:,i] = too_big
-                    sq_dists[i,i] = 0.0
-                if len(lr_dict[j]) == 2:
-                    # no more than 2 neighbours
-                    sq_dists[j,:] = too_big
-                    sq_dists[:,j] = too_big
-                    sq_dists[j,j] = 0.0
-
-                # fix the dist matrix
-                sq_dists[j,i] = too_big
-                sq_dists[i,j] = too_big
-                dists = squareform(sq_dists)
-
-            # now everyone should have two neighbours ( but not always )
-            # The global path may be separated into several disjoint rings.
-            # so we need to make sure that we get all the nodes in the ordering list
-            trier = 0   # start of a new disjoint ring
-            ordering = [trier]
-            while len(ordering) < len(list(lr_dict.keys())):
-                try:
-                    adding_index = lr_dict[trier][0]    # ok IF this guy has a registered neighbour
-                    if adding_index in ordering:        # NOT ok if the neighbour is already in the list
-                        raise IndexError()
-                    ordering.append(adding_index)
-                    while len(ordering) < len(list(lr_dict.keys())):  # try consume the entire ring
-                        # len(ordering) >= 2
-                        last = ordering[-1]
-                        if lr_dict[last][0] == ordering[-2]:    # bi-directionality means this will always work
-                            try:
-                                adding_index = lr_dict[last][1] # ok IF this guy has two neighbours
-                                if adding_index in ordering:    # NOT ok if the neighbour is already in the list
-                                    raise IndexError()
-                                ordering.append(adding_index)
-                            except IndexError:                  # only one neighbour
-                                # stick (2 city system)
-                                while(trier in ordering):       # find the next index NOT in the ordering
-                                    trier += 1
-                                if trier < len(list(lr_dict.keys())): # make sure it makes sense
-                                    ordering.append(trier)
-                                break
-                        else:
-                            adding_index = lr_dict[last][0]
-                            if adding_index in ordering:
-                                raise IndexError()
-                            ordering.append(adding_index)
-                except IndexError:                  # start a new disjoint ring
-                    # single point
-                    while(trier in ordering):
-                        trier += 1
-                    if trier < len(list(lr_dict.keys())): # make sure it makes sense
-                        ordering.append(trier)
-
-        # sanity check
-        if len(ordering) != self.numStoits:
-            print("WATTUP, ordering is looking wrong!")
-            print(ordering)
-            print(lr_dict)
-
-        # reshuffle the contig order!
-        # yay for bubble sort!
-        working = np.arange(self.numStoits)
-        for i in range(1, self.numStoits):
-            # where is this guy in the list
-            loc = list(working).index(ordering[i])
-            if loc != i:
-                # swap the columns
-                self.covProfiles[:,[i,loc]] = self.covProfiles[:,[loc,i]]
-                self.stoit_col_names[[i,loc]] = self.stoit_col_names[[loc,i]]
-                working[[i,loc]] = working[[loc,i]]

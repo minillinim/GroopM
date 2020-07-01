@@ -110,15 +110,11 @@ class ProfileManager:
         self.indices = np_array([])         # indices into the data structure based on condition
         self.covProfiles = np_array([])     # coverage based coordinates
         self.transformedCP = np_array([])   # the munged data points
-        self.corners = np_array([])         # the corners of the tranformed space
-        self.TCentre = 0.                   # the centre of the coverage space
-        self.transRadius = 0.               # distance from corner to centre of transformed space
         self.averageCoverages = np_array([])# average coverage across all stoits
         self.normCoverages = np_array([])   # norm of the raw coverage vectors
         self.kmerSigs = np_array([])        # raw kmer signatures
-        self.kmerNormPC1 = np_array([])     # First PC of kmer sigs normalized to [0, 1]
-        self.kmerPCs = np_array([])         # PCs of kmer sigs capturing specified variance
-        self.kmerVarPC = np_array([])       # variance of each PC
+        self.kmerNormSVD1 = np_array([])    # First SVD of kmer sigs normalized to [0, 1]
+        self.kmerSVDs = np_array([])        # PCs of kmer sigs capturing specified variance
         self.stoitColNames = np_array([])
         self.contigNames = np_array([])
         self.contigLengths = np_array([])
@@ -144,21 +140,20 @@ class ProfileManager:
         self.scaleFactor = scaleFactor      # scale every thing in the transformed data to this dimension
 
     def loadData(self,
-                 timer,
-                 condition,                 # condition as set by another function
-                 bids=[],                   # if this is set then only load those contigs with these bin ids
-                 verbose=True,              # many to some output messages
-                 silent=False,              # some to no output messages
-                 loadCovProfiles=True,
-                 loadKmerPCs=True,
-                 loadKmerVarPC=True,
-                 loadRawKmers=False,
-                 makeColors=True,
-                 loadContigNames=True,
-                 loadContigLengths=True,
-                 loadContigGCs=True,
-                 loadBins=False,
-                 loadLinks=False):
+        timer,
+        condition,                 # condition as set by another function
+        bids=[],                   # if this is set then only load those contigs with these bin ids
+        verbose=True,              # many to some output messages
+        silent=False,              # some to no output messages
+        loadCovProfiles=True,
+        loadRawKmers=False,
+        loadKmerSVDs=True,
+        makeColors=True,
+        loadContigNames=True,
+        loadContigLengths=True,
+        loadContigGCs=True,
+        loadBins=False,
+        loadLinks=False):
         """Load pre-parsed data"""
 
         timer.getTimeStamp()
@@ -170,9 +165,10 @@ class ProfileManager:
         try:
             self.numStoits = self.getNumStoits()
             self.condition = condition
-            self.indices = self.dataManager.getConditionalIndices(self.dbFileName,
-                                                                  condition=condition,
-                                                                  silent=silent)
+            self.indices = self.dataManager.getConditionalIndices(
+                self.dbFileName,
+                condition=condition,
+                silent=silent)
             if(verbose):
                 print("    Loaded indices with condition:", condition)
             self.numContigs = len(self.indices)
@@ -189,6 +185,7 @@ class ProfileManager:
                     print("    Loading coverage profiles")
                 self.covProfiles = self.dataManager.getCoverageProfiles(self.dbFileName, indices=self.indices)
                 self.normCoverages = self.dataManager.getNormalisedCoverageProfiles(self.dbFileName, indices=self.indices)
+                self.transformedCP = self.dataManager.getTransformedCoverageProfiles(self.dbFileName, indices=self.indices)
 
                 # work out average coverages
                 self.averageCoverages = np_array([sum(i)/self.numStoits for i in self.covProfiles])
@@ -198,21 +195,15 @@ class ProfileManager:
                     print("    Loading RAW kmer sigs")
                 self.kmerSigs = self.dataManager.getKmerSigs(self.dbFileName, indices=self.indices)
 
-            if(loadKmerPCs):
-                self.kmerPCs = self.dataManager.getKmerPCAs(self.dbFileName, indices=self.indices)
+            if loadKmerSVDs:
+                self.kmerSVDs = self.dataManager.getKmerSVDs(self.dbFileName, indices=self.indices)
 
                 if(verbose):
-                    print("    Loading PCA kmer sigs (" + str(len(self.kmerPCs[0])) + " dimensional space)")
+                    print("    Loading SVD kmer sigs (" + str(len(self.kmerSVDs[0])) + " dimensional space)")
 
-                self.kmerNormPC1 = np_copy(self.kmerPCs[:,0])
-                self.kmerNormPC1 -= np_min(self.kmerNormPC1)
-                self.kmerNormPC1 /= np_max(self.kmerNormPC1)
-
-            if(loadKmerVarPC):
-                self.kmerVarPC = self.dataManager.getKmerVarPC(self.dbFileName, indices=self.indices)
-
-                if(verbose):
-                    print("    Loading PCA kmer variance (total variance: %.2f" % np_sum(self.kmerVarPC) + ")")
+                self.kmerNormPC1 = np_copy(self.kmerSVDs[:,0])
+                self.kmerNormPC1 -= self.kmerNormPC1.min()
+                self.kmerNormPC1 /= self.kmerNormPC1.max()
 
             if(loadContigNames):
                 if(verbose):
@@ -290,8 +281,8 @@ class ProfileManager:
         self.contigNames = np_delete(self.contigNames, deadRowIndices, axis=0)
         self.contigLengths = np_delete(self.contigLengths, deadRowIndices, axis=0)
         self.contigGCs = np_delete(self.contigGCs, deadRowIndices, axis=0)
+        self.kmerSVDs = np_delete(self.kmerSVDs, deadRowIndices, axis=0)
         #self.kmerSigs = np_delete(self.kmerSigs, deadRowIndices, axis=0)
-        self.kmerPCs = np_delete(self.kmerPCs, deadRowIndices, axis=0)
         self.binIds = np_delete(self.binIds, deadRowIndices, axis=0)
 
 #------------------------------------------------------------------------------
@@ -312,11 +303,6 @@ class ProfileManager:
     def getNumMers(self):
         """return the value of numMers in the metadata tables"""
         return self.dataManager.getNumMers(self.dbFileName)
-
-### USE the member vars instead!
-#    def getNumCons(self):
-#        """return the value of numCons in the metadata tables"""
-#        return self.dataManager.getNumCons(self.dbFileName)
 
     def getNumBins(self):
         """return the value of numBins in the metadata tables"""
@@ -362,9 +348,10 @@ class ProfileManager:
 
     def setBinAssignments(self, assignments, nuke=False):
         """Save our bins into the DB"""
-        self.dataManager.setBinAssignments(self.dbFileName,
-                                           assignments,
-                                           nuke=nuke)
+        self.dataManager.setBinAssignments(
+            self.dbFileName,
+            assignments,
+            nuke=nuke)
 
     def loadLinks(self):
         """Extra wrapper 'cause I am dumb"""
@@ -398,96 +385,6 @@ class ProfileManager:
     def getAverageCoverage(self, rowIndex):
         """Return the average coverage for this contig across all stoits"""
         return sum(self.transformedCP[rowIndex])/self.numStoits
-
-    def shuffleBAMs(self):
-        """Make the data transformation deterministic by reordering the bams"""
-        # first we should make a subset of the total data
-        # we'd like to take it down to about 1500 or so RI's
-        # but we'd like to do this in a repeatable way
-        ideal_contig_num = 1500
-        sub_cons = list(range(len(self.indices)))
-        while len(sub_cons) > ideal_contig_num:
-            # select every second contig when sorted by norm cov
-            cov_sorted = np_argsort(self.normCoverages[sub_cons])
-            sub_cons = np_array([sub_cons[cov_sorted[i*2]] for i in np_arange(int(len(sub_cons)/2))])
-
-            if len(sub_cons) > ideal_contig_num:
-                # select every second contig when sorted by mer PC1
-                mer_sorted = np_argsort(self.kmerNormPC1[sub_cons])
-                sub_cons = np_array([sub_cons[mer_sorted[i*2]] for i in np_arange(int(len(sub_cons)/2))])
-
-        # now that we have a subset, calculate the distance between each of the untransformed vectors
-        num_sc = len(sub_cons)
-
-        # log shift the coverages towards the origin
-        sub_covs = np_transpose([self.covProfiles[i]*(np_log10(self.normCoverages[i])/self.normCoverages[i]) for i in sub_cons])
-        sq_dists = cdist(sub_covs,sub_covs,'cityblock')
-        dists = squareform(sq_dists)
-
-        # initialise a list of left, right neighbours
-        lr_dict = {}
-        for i in range(self.numStoits):
-            lr_dict[i] = []
-
-        too_big = 10000
-        while True:
-            closest = np_argmin(dists)
-            if dists[closest] == too_big:
-                break
-            (i,j) = self.small2indices(closest, self.numStoits-1)
-            lr_dict[j].append(i)
-            lr_dict[i].append(j)
-
-            # mark these guys as neighbours
-            if len(lr_dict[i]) == 2:
-                # no more than 2 neighbours
-                sq_dists[i,:] = too_big
-                sq_dists[:,i] = too_big
-                sq_dists[i,i] = 0.0
-            if len(lr_dict[j]) == 2:
-                # no more than 2 neighbours
-                sq_dists[j,:] = too_big
-                sq_dists[:,j] = too_big
-                sq_dists[j,j] = 0.0
-
-            # fix the dist matrix
-            sq_dists[j,i] = too_big
-            sq_dists[i,j] = too_big
-            dists = squareform(sq_dists)
-
-        # now make the ordering
-        ordering = [0, lr_dict[0][0]]
-        done = 2
-        while done < self.numStoits:
-            last = ordering[done-1]
-            if lr_dict[last][0] == ordering[done-2]:
-                ordering.append(lr_dict[last][1])
-                last = lr_dict[last][1]
-            else:
-                ordering.append(lr_dict[last][0])
-                last = lr_dict[last][0]
-            done+=1
-
-        # reshuffle the contig order!
-        # yay for bubble sort!
-        working = np_arange(self.numStoits)
-        for i in range(1, self.numStoits):
-            # where is this guy in the list
-            loc = list(working).index(ordering[i])
-            if loc != i:
-                # swap the columns
-                self.covProfiles[:,[i,loc]] = self.covProfiles[:,[loc,i]]
-                self.stoitColNames[[i,loc]] = self.stoitColNames[[loc,i]]
-                working[[i,loc]] = working[[loc,i]]
-
-    def transformCP(self, timer, silent=False, nolog=False):
-        """Do the main transformation on the coverage profile data"""
-        if(not silent):
-            print("    Reticulating splines")
-        self.transformedCP = self.dataManager.getTransformedCoverageProfiles(self.dbFileName, indices=self.indices)
-        self.corners = self.dataManager.getTransformedCoverageCorners(self.dbFileName)
-        self.TCentre = np_mean(self.corners, axis=0)
-        self.transRadius = np_norm(self.corners[0] - self.TCentre)
 
 #------------------------------------------------------------------------------
 # DEBUG CRUFT
@@ -581,31 +478,9 @@ class ProfileManager:
             discrete_map.append((0,0,0))
             self.colorMapGC = LinearSegmentedColormap.from_list('GC_DISCRETE', discrete_map, N=20)
 
-    def plotStoitNames(self, ax):
-        """Plot stoit names on an existing axes"""
-        outer_index = 0
-        for corner in self.corners:
-            ax.text(corner[0],
-                    corner[1],
-                    corner[2],
-                    self.stoitColNames[outer_index],
-                    color='#000000'
-                    )
-            outer_index += 1
-
-    def plotUnbinned(self, timer, coreCut, transform=True, ignoreContigLengths=False):
+    def plotUnbinned(self, timer, coreCut, ignoreContigLengths=False):
         """Plot all contigs over a certain length which are unbinned"""
         self.loadData(timer, "((length >= "+str(coreCut)+") & (bid == 0))")
-
-        if transform:
-            self.transformCP(timer)
-        else:
-            if self.numStoits == 3:
-                self.transformedCP = self.covProfiles
-            else:
-                print("Number of stoits != 3. You need to transform")
-                self.transformCP(timer)
-
         fig = plt.figure()
         ax1 = fig.add_subplot(111, projection='3d')
         if ignoreContigLengths:
@@ -613,7 +488,6 @@ class ProfileManager:
         else:
             sc = ax1.scatter(self.transformedCP[:,0], self.transformedCP[:,1], self.transformedCP[:,2], edgecolors='k', c=self.contigGCs, cmap=self.colorMapGC, vmin=0.0, vmax=1.0, s=np_sqrt(self.contigLengths), marker='.')
         sc.set_edgecolors = sc.set_facecolors = lambda *args:None  # disable depth transparency effect
-        self.plotStoitNames(ax1)
 
         try:
             plt.show()
@@ -623,47 +497,37 @@ class ProfileManager:
             raise
         del fig
 
-    def plotAll(self, timer, coreCut, transform=True, ignoreContigLengths=False):
+    def plotAll(self, timer, coreCut, ignoreContigLengths=False):
         """Plot all contigs over a certain length which are unbinned"""
         self.loadData(timer, "((length >= "+str(coreCut)+"))")
-        if transform:
-            self.transformCP(timer)
-        else:
-            if self.numStoits == 3:
-                self.transformedCP = self.covProfiles
-            else:
-                print("Number of stoits != 3. You need to transform")
-                self.transformCP(timer)
-
         fig = plt.figure()
         ax1 = fig.add_subplot(111, projection='3d')
         if ignoreContigLengths:
-            sc = ax1.scatter(self.transformedCP[:,0],
-                             self.transformedCP[:,1],
-                             self.transformedCP[:,2],
-                             edgecolors='none',
-                             c=self.contigGCs,
-                             cmap=self.colorMapGC,
-                             vmin=0.0,
-                             vmax=1.0,
-                             marker='.',
-                             s=10.
-                             )
+            sc = ax1.scatter(
+                self.transformedCP[:,0],
+                self.transformedCP[:,1],
+                self.transformedCP[:,2],
+                edgecolors='none',
+                c=self.contigGCs,
+                cmap=self.colorMapGC,
+                vmin=0.0,
+                vmax=1.0,
+                marker='.',
+                s=10.)
         else:
-            sc = ax1.scatter(self.transformedCP[:,0],
-                             self.transformedCP[:,1],
-                             self.transformedCP[:,2],
-                             edgecolors='k',
-                             c=self.contigGCs,
-                             cmap=self.colorMapGC,
-                             vmin=0.0,
-                             vmax=1.0,
-                             marker='.',
-                             s=np_sqrt(self.contigLengths)
-                             )
+            sc = ax1.scatter(
+                self.transformedCP[:,0],
+                self.transformedCP[:,1],
+                self.transformedCP[:,2],
+                edgecolors='k',
+                c=self.contigGCs,
+                cmap=self.colorMapGC,
+                vmin=0.0,
+                vmax=1.0,
+                marker='.',
+                s=np_sqrt(self.contigLengths))
 
         sc.set_edgecolors = sc.set_facecolors = lambda *args:None  # disable depth transparency effect
-        self.plotStoitNames(ax1)
 
         cbar = plt.colorbar(sc, shrink=0.5)
         cbar.ax.tick_params()

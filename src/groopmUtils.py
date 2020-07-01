@@ -212,13 +212,11 @@ class BinExplorer:
     def __init__(self,
                  dbFileName,
                  bids=[],
-                 transform=True,
                  cmstring="HSV",
                  ignoreContigLengths=False,
                  binLabelsFile = "",
                  contigColorsFile = ""):
         self.ignoreContigLengths = ignoreContigLengths
-        self.transform = transform
         self.cmString = cmstring
         self.BM = binManager.BinManager(dbFileName=dbFileName)   # bins
         self.PM = self.BM.PM
@@ -251,7 +249,6 @@ class BinExplorer:
                          silent=False,
                          loadContigLengths=True,
                          loadContigNames=True,
-                         transform = self.transform,
                          cutOff=coreCut)
         if len(self.BM.bins) == 0:
             print("Sorry, no bins to plot")
@@ -439,7 +436,6 @@ class BinExplorer:
                          bids=self.bids,
                          loadContigLengths=True,
                          loadContigNames=False,
-                         transform = self.transform,
                          cutOff=coreCut,
                          getUnbinned=True,)
         if len(self.BM.bins) == 0:
@@ -538,8 +534,7 @@ class BinExplorer:
         self.BM.loadBins(timer,
                          makeBins=True,
                          silent=False,
-                         bids=self.bids,
-                         transform=self.transform)
+                         bids=self.bids)
         if len(self.BM.bins) == 0:
             print("Sorry, no bins to plot")
         else:
@@ -723,11 +718,11 @@ class BinExplorer:
 
         This function will help users know which bins to merge
         """
-        self.BM.loadBins(timer,
-                         makeBins=True,
-                         silent=False,
-                         bids=self.bids,
-                         transform=self.transform)
+        self.BM.loadBins(
+            timer,
+            makeBins=True,
+            silent=False,
+            bids=self.bids)
         if len(self.BM.bins) == 0:
             print("Sorry, no bins to plot")
         else:
@@ -738,7 +733,10 @@ class BinExplorer:
     def plotUnbinned(self, timer, coreCut):
         """Plot all contigs over a certain length which are unbinned"""
         print("Plotting unbinned contigs")
-        self.PM.plotUnbinned(timer, coreCut, transform=self.transform, ignoreContigLengths=self.ignoreContigLengths)
+        self.PM.plotUnbinned(
+            timer,
+            coreCut,
+            ignoreContigLengths=self.ignoreContigLengths)
 
     def plotSideBySide(self, timer, coreCut):
         """Plot all bins separately in one large image"""
@@ -746,7 +744,6 @@ class BinExplorer:
                          makeBins=True,
                          silent=False,
                          bids=self.bids,
-                         transform=self.transform,
                          cutOff=coreCut)
         if len(self.BM.bins) == 0:
             print("Sorry, no bins to plot")
@@ -811,9 +808,6 @@ class BinExplorer:
             ax2.set_ylim(ax1.get_ylim())
             ax2.set_zlim(ax1.get_zlim())
 
-
-            self.BM.plotStoitNames(ax1)
-            self.BM.plotStoitNames(ax2)
             try:
                 plt.show()
                 plt.close(fig)
@@ -838,7 +832,6 @@ class BinExplorer:
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_zticks([])
-            self.BM.plotStoitNames(ax)
 
             try:
                 fig.set_size_inches(12,12)
@@ -872,7 +865,6 @@ class BinExplorer:
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_zticks([])
-            self.BM.plotStoitNames(ax)
 
             try:
                 fig.set_size_inches(12,12)
