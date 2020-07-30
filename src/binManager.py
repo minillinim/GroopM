@@ -106,18 +106,18 @@ class BinManager:
 # LOADING / SAVING
 
     def loadBins(self,
-                 timer,
-                 getUnbinned=False,
-                 bids=[],
-                 makeBins=False,
-                 silent=True,
-                 loadKmerPCs=False,
-                 loadRawKmers=False,
-                 loadCovProfiles=True,
-                 loadContigLengths=True,
-                 loadLinks=False,
-                 loadContigNames=True,
-                 cutOff=0):
+         timer,
+         getUnbinned=False,
+         bids=[],
+         makeBins=False,
+         silent=True,
+         loadKmerSVDs=False,
+         loadRawKmers=False,
+         loadCovProfiles=True,
+         loadContigLengths=True,
+         loadLinks=False,
+         loadContigNames=True,
+         cutOff=0):
         """Load data and make bin objects"""
         # build the condition
 
@@ -133,22 +133,22 @@ class BinManager:
 
         # if we're going to make bins then we'll need kmer sigs
         if(makeBins):
-            loadKmerPCs=True
+            loadKmerSVDs=True
             loadCovProfiles=True
 
-        self.PM.loadData(timer,
-                         condition,
-                         bids=bids,
-                         silent=silent,
-                         loadCovProfiles=loadCovProfiles,
-                         loadKmerPCs=loadKmerPCs,
-                         loadRawKmers=loadRawKmers,
-                         makeColors=True,
-                         loadContigNames=loadContigNames,
-                         loadContigLengths=loadContigLengths,
-                         loadBins=True,
-                         loadLinks=loadLinks
-                        )
+        self.PM.loadData(
+            timer,
+            condition,
+            bids=bids,
+            silent=silent,
+            loadCovProfiles=loadCovProfiles,
+            loadKmerSVDs=loadKmerSVDs,
+            loadRawKmers=loadRawKmers,
+            makeColors=True,
+            loadContigNames=loadContigNames,
+            loadContigLengths=loadContigLengths,
+            loadBins=True,
+            loadLinks=loadLinks)
 
         # exit if no bins loaded
         if self.PM.numContigs == 0:
@@ -192,8 +192,15 @@ class BinManager:
                 if len(binMembers[bid]) == 0:
                     invalid_bids.append(bid)
                 else:
-                    self.bins[bid] = Bin(np_array(binMembers[bid]), bid, self.PM.scaleFactor-1)
-                    self.bins[bid].makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormPC1, self.PM.kmerPCs, self.PM.contigGCs, self.PM.contigLengths)
+                    self.bins[bid] = Bin(
+                        np_array(binMembers[bid]), bid, self.PM.scaleFactor-1)
+                    self.bins[bid].makeBinDist(
+                        self.PM.transformedCP,
+                        self.PM.averageCoverages,
+                        self.PM.kmerNormSVD1,
+                        self.PM.kmerSVDs,
+                        self.PM.contigGCs,
+                        self.PM.contigLengths)
         if len(invalid_bids) != 0:
             print("MT bins!")
             print(invalid_bids)
@@ -210,9 +217,9 @@ class BinManager:
         """
         # save the bin assignments
         self.PM.setBinAssignments(
-                                  self.getGlobalBinAssignments(binAssignments), # convert to global indices
-                                  nuke=nuke
-                                  )
+            self.getGlobalBinAssignments(binAssignments), # convert to global indices
+            nuke=nuke)
+
         # overwrite the bins table
         self.setBinStats()
 
@@ -524,12 +531,11 @@ class BinManager:
                                printInstructions=False,
                                use_elipses=use_elipses)
 
-
     def getSplitties(self, bid, n, mode):
         """Return a set of split bins"""
         obs = np_array([])
         if(mode=='kmer'):
-            obs = np_array([self.PM.kmerNormPC1[i] for i in self.getBin(bid).rowIndices])
+            obs = np_array([self.PM.kmerNormSVD1[i] for i in self.getBin(bid).rowIndices])
         elif(mode=='cov'):
             obs = np_array([self.PM.covProfiles[i] for i in self.getBin(bid).rowIndices])
         elif(mode=='len'):
@@ -558,7 +564,7 @@ class BinManager:
 
                 for row_index in holding_array:
                     bin_assignment_update[row_index] = split_bin.id
-                split_bin.makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormPC1, self.PM.kmerPCs, self.PM.contigGCs, self.PM.contigLengths)
+                split_bin.makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormSVD1, self.PM.kmerSVDs, self.PM.contigGCs, self.PM.contigLengths)
                 bids.append(split_bin.id)
                 holding_array = np_array([])
                 current_group = idx[i]
@@ -570,7 +576,7 @@ class BinManager:
             split_bin = self.makeNewBin(holding_array)
             for row_index in holding_array:
                 bin_assignment_update[int(row_index)] = split_bin.id
-            split_bin.makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormPC1, self.PM.kmerPCs, self.PM.contigGCs, self.PM.contigLengths)
+            split_bin.makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormSVD1, self.PM.kmerSVDs, self.PM.contigGCs, self.PM.contigLengths)
             bids.append(split_bin.id)
 
         return (bin_assignment_update, bids)
@@ -581,7 +587,7 @@ class BinManager:
         Perfoms a one-way anova to determine if the larger bin would be
         significantly changed if it consumed the smaller
 
-        OR does a tolerance test on kmerNormPC1. We assume that bin1 is larger than bin2
+        OR does a tolerance test on kmerNormSVD1. We assume that bin1 is larger than bin2
         """
         if(bin1.id != bin2.id):
             if not ignoreCov: # work out coverage distributions
@@ -612,8 +618,8 @@ class BinManager:
                     else:
                         mer_match = False
                 else:
-                    b1_k_dist = bin1.getkmerValDist(self.PM.kmerNormPC1)
-                    b2_k_dist = bin2.getkmerValDist(self.PM.kmerNormPC1)
+                    b1_k_dist = bin1.getkmerValDist(self.PM.kmerNormSVD1)
+                    b2_k_dist = bin2.getkmerValDist(self.PM.kmerNormSVD1)
                     k_dist_1 = b1_k_dist
                     if(bin1.binSize < bin2.binSize):
                         k_dist_1 = b2_k_dist
@@ -659,7 +665,7 @@ class BinManager:
             dead_bin = self.getBin(bids[0])
             for row_index in dead_bin.rowIndices:
                 self.PM.binIds[row_index] = parent_bin.id
-            parent_bin.consume(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormPC1, self.PM.kmerPCs, self.PM.contigGCs, self.PM.contigLengths, dead_bin, verbose=verbose)
+            parent_bin.consume(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormSVD1, self.PM.kmerSVDs, self.PM.contigGCs, self.PM.contigLengths, dead_bin, verbose=verbose)
             self.deleteBins([bids[0]], force=True)
         else:
             # just use the first given as the parent
@@ -681,7 +687,7 @@ class BinManager:
                 continue_merge = True
             else:
                 tmp_bin = self.makeNewBin(np_concatenate([parent_bin.rowIndices,dead_bin.rowIndices]))
-                tmp_bin.makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormPC1, self.PM.kmerPCs, self.PM.contigGCs, self.PM.contigLengths)
+                tmp_bin.makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormSVD1, self.PM.kmerSVDs, self.PM.contigGCs, self.PM.contigLengths)
                 self.plotSideBySide([parent_bin.id,dead_bin.id,tmp_bin.id], use_elipses=use_elipses)
                 self.deleteBins([tmp_bin.id], force=True)
                 user_option = self.promptOnMerge(bids=[parent_bin.id,dead_bin.id])
@@ -702,8 +708,8 @@ class BinManager:
 
                 parent_bin.consume(self.PM.transformedCP,
                                    self.PM.averageCoverages,
-                                   self.PM.kmerNormPC1,
-                                   self.PM.kmerPCs,
+                                   self.PM.kmerNormSVD1,
+                                   self.PM.kmerSVDs,
                                    self.PM.contigGCs,
                                    self.PM.contigLengths,
                                    dead_bin,
@@ -961,7 +967,7 @@ class BinManager:
                 if getKVals:
                     bin_centroid_kvals = np_append(bin_centroid_kvals,
                                                    np_median([
-                                                            self.PM.kmerNormPC1[row_index] for row_index in
+                                                            self.PM.kmerNormSVD1[row_index] for row_index in
                                                             self.bins[bid].rowIndices
                                                             ],
                                                            axis=0)
@@ -991,7 +997,7 @@ class BinManager:
 
     def scoreContig(self, rowIndex, bid):
         """Determine how well a particular contig fits with a bin"""
-        return self.getBin(bid).scoreProfile(self.PM.kmerNormPC1[rowIndex], self.PM.transformedCP[rowIndex])
+        return self.getBin(bid).scoreProfile(self.PM.kmerNormSVD1[rowIndex], self.PM.transformedCP[rowIndex])
 
     def measureBinVariance(self, mode='kmer', makeKillList=False, tolerance=1.0, verbose=False):
         """Get the stats on M's across all bins
@@ -1004,7 +1010,7 @@ class BinManager:
         Rs = {}
         for bid in self.getBids():
             if(mode == 'kmer'):
-                (Ms[bid], Ss[bid], Rs[bid]) = self.bins[bid].getInnerVariance(self.PM.kmerNormPC1)
+                (Ms[bid], Ss[bid], Rs[bid]) = self.bins[bid].getInnerVariance(self.PM.kmerNormSVD1)
             elif(mode == 'cov'):
                 (Ms[bid], Ss[bid], Rs[bid]) = self.bins[bid].getInnerVariance(self.PM.transformedCP, mode="cov")
 
@@ -1121,8 +1127,8 @@ class BinManager:
             return
 
         for bid in self.getBids():
-            self.bins[bid].makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormPC1,
-                                        self.PM.kmerPCs, self.PM.contigGCs, self.PM.contigLengths)
+            self.bins[bid].makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormSVD1,
+                                        self.PM.kmerSVDs, self.PM.contigGCs, self.PM.contigLengths)
             self.bins[bid].printBin(self.PM.contigNames, self.PM.covProfiles, self.PM.contigGCs,
                                     self.PM.contigLengths, self.PM.isLikelyChimeric,
                                     outFormat=outFormat, separator=separator, stream=stream)
@@ -1179,8 +1185,8 @@ class BinManager:
             ax = fig.add_subplot(1, 2, 2)
             for i, bid in enumerate(bids):
                 self.bins[bid].plotMersOnAx(ax,
-                                            self.PM.kmerPCs[:,0],
-                                            self.PM.kmerPCs[:,1],
+                                            self.PM.kmerSVDs[:,0],
+                                            self.PM.kmerSVDs[:,1],
                                             self.PM.contigGCs,
                                             self.PM.contigLengths,
                                             self.PM.colorMapGC,
@@ -1225,7 +1231,6 @@ class BinManager:
             coords = self.PM.transformedCP
             et = ET
             pc = True
-
 
         if squash:
             # mix all the points together
@@ -1321,14 +1326,14 @@ class BinManager:
         plt.close(fig)
         del fig
 
-
-    def plotBins(self,
-                 FNPrefix="BIN",
-                 sideBySide=False,
-                 folder='',
-                 plotEllipsoid=False,
-                 ignoreContigLengths=False,
-                 ET=None):
+    def plotBins(
+        self,
+        FNPrefix="BIN",
+        sideBySide=False,
+        folder='',
+        plotEllipsoid=False,
+        ignoreContigLengths=False,
+        ET=None):
         """Make plots of all the bins"""
         if plotEllipsoid and ET == None:
             ET = EllipsoidTool()
@@ -1337,7 +1342,7 @@ class BinManager:
             makeSurePathExists(folder)
 
         for bid in self.getBids():
-            self.bins[bid].makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormPC1, self.PM.kmerPCs, self.PM.contigGCs, self.PM.contigLengths)
+            self.bins[bid].makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormSVD1, self.PM.kmerSVDs, self.PM.contigGCs, self.PM.contigLengths)
 
         if(sideBySide):
             print("Plotting side by side")
@@ -1345,15 +1350,21 @@ class BinManager:
         else:
             print("Plotting bins")
             for bid in self.getBids():
-                if folder != '':
-                    self.bins[bid].plotBin(self.PM.transformedCP, self.PM.contigGCs, self.PM.kmerNormPC1,
-                                            self.PM.contigLengths, self.PM.colorMapGC, self.PM.isLikelyChimeric,
-                                            fileName=osp_join(folder, FNPrefix+"_"+str(bid)),
-                                            ignoreContigLengths=ignoreContigLengths, ET=ET)
+                if folder == '':
+                    file_name = FNPrefix+"_"+str(bid)
                 else:
-                    self.bins[bid].plotBin(self.PM.transformedCP, self.PM.contigGCs, self.PM.kmerNormPC1,
-                                              self.PM.contigLengths, self.PM.colorMapGC, self.PM.isLikelyChimeric,
-                                              fileName=FNPrefix+"_"+str(bid), ignoreContigLengths=ignoreContigLengths, ET=ET)
+                    file_name = osp_join(folder, FNPrefix+"_"+str(bid))
+
+                self.bins[bid].plotBin(
+                    self.PM.transformedCP,
+                    self.PM.contigGCs,
+                    self.PM.kmerNormSVD1,
+                    self.PM.contigLengths,
+                    self.PM.colorMapGC,
+                    self.PM.isLikelyChimeric,
+                    fileName=file_name,
+                    ignoreContigLengths=ignoreContigLengths,
+                    ET=ET)
 
     def plotBinCoverage(self, plotEllipses=False, plotContigLengs=False, printID=False):
         """Make plots of all the bins"""
@@ -1375,14 +1386,14 @@ class BinManager:
         ax.set_zlabel('kmer PC3')
         ax.set_title('kmer space')
 
-        sc = ax.scatter(self.PM.kmerPCs[:,0], self.PM.kmerPCs[:,1], self.PM.kmerPCs[:,2], edgecolors='k', c=self.PM.contigGCs, cmap=self.PM.colorMapGC, vmin=0.0, vmax=1.0, s=disp_lens)
+        sc = ax.scatter(self.PM.kmerSVDs[:,0], self.PM.kmerSVDs[:,1], self.PM.kmerSVDs[:,2], edgecolors='k', c=self.PM.contigGCs, cmap=self.PM.colorMapGC, vmin=0.0, vmax=1.0, s=disp_lens)
         sc.set_edgecolors = sc.set_facecolors = lambda *args:None # disable depth transparency effect
 
         if plotEllipses:
             ET = EllipsoidTool()
             for bid in self.getBids():
                 row_indices = self.bins[bid].rowIndices
-                (center, radii, rotation) = self.bins[bid].getBoundingEllipsoid(self.PM.kmerPCs[:, 0:3], ET=ET)
+                (center, radii, rotation) = self.bins[bid].getBoundingEllipsoid(self.PM.kmerSVDs[:, 0:3], ET=ET)
                 centroid_gc = np_mean(self.PM.contigGCs[row_indices])
                 centroid_color = self.PM.colorMapGC(centroid_gc)
                 if printID:

@@ -137,7 +137,7 @@ class Bin:
 #------------------------------------------------------------------------------
 # Grow and shrink
 
-    def consume(self, transformedCP, averageCoverages, kmerNormPC1, kmerPCs, contigGCs, contigLengths, deadBin, verbose=False):
+    def consume(self, transformedCP, averageCoverages, kmerNormSVD1, kmerPCs, contigGCs, contigLengths, deadBin, verbose=False):
         """Combine the contigs of another bin with this one"""
         # consume all the other bins rowIndices
         if(verbose):
@@ -146,7 +146,7 @@ class Bin:
         self.binSize  = self.rowIndices.shape[0]
 
         # fix the stats on our bin
-        self.makeBinDist(transformedCP, averageCoverages, kmerNormPC1, kmerPCs, contigGCs, contigLengths)
+        self.makeBinDist(transformedCP, averageCoverages, kmerNormSVD1, kmerPCs, contigGCs, contigLengths)
 
     def scoreProfile(self, kmerVal, transformedCP):
         """Determine how similar this profile is to the bin distribution
@@ -158,7 +158,7 @@ class Bin:
         merZ = np.abs(kmerVal - self.kValMeanNormPC1)/self.kValStdevNormPC1
         return (covZ,merZ)
 
-    def purge(self, deadIndices, transformedCP, averageCoverages, kmerNormPC1, kmerPCs, contigGCs, contigLengths):
+    def purge(self, deadIndices, transformedCP, averageCoverages, kmerNormSVD1, kmerPCs, contigGCs, contigLengths):
         """Delete some rowIndices and remake stats"""
         old_ri = self.rowIndices
         self.rowIndices = np.array([])
@@ -167,7 +167,7 @@ class Bin:
                 self.rowIndices = np.append(self.rowIndices, i)
 
         # fix the stats on our bin
-        self.makeBinDist(transformedCP, averageCoverages, kmerNormPC1, kmerPCs, contigGCs, contigLengths)
+        self.makeBinDist(transformedCP, averageCoverages, kmerNormSVD1, kmerPCs, contigGCs, contigLengths)
 
 #------------------------------------------------------------------------------
 # Stats and properties
@@ -192,7 +192,7 @@ class Bin:
         self.gcUpperLimit = 0.0
         self.gcLowerLimit = 0.0
 
-    def makeBinDist(self, transformedCP, averageCoverages, kmerNormPC1, kmerPCs, contigGCs, contigLengths):
+    def makeBinDist(self, transformedCP, averageCoverages, kmerNormSVD1, kmerPCs, contigGCs, contigLengths):
         """Determine the distribution of the points in this bin
 
         The distribution is largely normal, except at the boundaries.
@@ -262,9 +262,9 @@ class Bin:
             std = mean_std
         return (np_median(working_list,axis=0), std)
 
-    def getkmerValDist(self, kmerNormPC1):
+    def getkmerValDist(self, kmerNormSVD1):
         """Return an array of kmer vals for this bin"""
-        return np.array([kmerNormPC1[i] for i in self.rowIndices])
+        return np.array([kmerNormSVD1[i] for i in self.rowIndices])
 
     def getGC_Dist(self, GCs):
         """Return an array of GCs for this bin"""
@@ -368,7 +368,7 @@ class Bin:
         num_recruited = 0
 
         # make the distribution
-        self.makeBinDist(PM.transformedCP, PM.averageCoverages, PM.kmerNormPC1, PM.kmerPCs, PM.contigGCs, PM.contigLengths)
+        self.makeBinDist(PM.transformedCP, PM.averageCoverages, PM.kmerNormSVD1, PM.kmerPCs, PM.contigGCs, PM.contigLengths)
         c_lens = PM.contigLengths[self.rowIndices]
 
         for x in self.makeRanges(self.covMedians[0], inclusivity*self.covStdevs[0], PM.scaleFactor):
@@ -383,7 +383,7 @@ class Bin:
                                                                c_lens)
                                 if not length_wrong:
                                     # fits length cutoff
-                                    (covZ,merZ) = self.scoreProfile(PM.kmerNormPC1[row_index], PM.transformedCP[row_index])
+                                    (covZ,merZ) = self.scoreProfile(PM.kmerNormSVD1[row_index], PM.transformedCP[row_index])
                                     if covZ <= inclusivity and merZ <= inclusivity:
                                         # we can recruit
                                         self.rowIndices = np.append(self.rowIndices,row_index)
@@ -470,18 +470,28 @@ class Bin:
                 raise
         del fig
 
-    def plotBin(self, transformedCP, contigGCs, kmerNormPC1, contigLengths, colorMapGC, isLikelyChimeric, fileName="", ignoreContigLengths=False, ET=None):
+    def plotBin(self,
+        transformedCP,
+        contigGCs,
+        kmerNormSVD1,
+        contigLengths,
+        colorMapGC,
+        isLikelyChimeric,
+        fileName="",
+        ignoreContigLengths=False,
+        ET=None):
         """Plot a single bin"""
         fig = plt.figure()
-        title = self.plotOnFig(fig, 1, 1, 1,
-                               transformedCP,
-                               contigGCs,
-                               contigLengths,
-                               colorMapGC,
-                               isLikelyChimeric,
-                               fileName=fileName,
-                               ignoreContigLengths=ignoreContigLengths,
-                               ET=ET)
+        title = self.plotOnFig(
+            fig, 1, 1, 1,
+            transformedCP,
+            contigGCs,
+            contigLengths,
+            colorMapGC,
+            isLikelyChimeric,
+            fileName=fileName,
+            ignoreContigLengths=ignoreContigLengths,
+            ET=ET)
 
         plt.title(title)
         if(fileName != ""):
@@ -501,47 +511,48 @@ class Bin:
         del fig
 
     def plotOnFig(self,
-                  fig,
-                  plot_rows,
-                  plot_cols,
-                  plot_num,
-                  transformedCP,
-                  contigGCs,
-                  contigLengths,
-                  colorMapGC,
-                  isLikelyChimeric,
-                  fileName="",
-                  ignoreContigLengths=False,
-                  ET=None,
-                  plotColorbar=True,
-                  extents=None):
+        fig,
+        plot_rows,
+        plot_cols,
+        plot_num,
+        transformedCP,
+        contigGCs,
+        contigLengths,
+        colorMapGC,
+        isLikelyChimeric,
+        fileName="",
+        ignoreContigLengths=False,
+        ET=None,
+        plotColorbar=True,
+        extents=None):
         ax = fig.add_subplot(plot_rows, plot_cols, plot_num, projection='3d')
-        return self.plotOnAx(ax,
-                             transformedCP,
-                             contigGCs,
-                             contigLengths,
-                             colorMapGC,
-                             isLikelyChimeric,
-                             fileName=fileName,
-                             ignoreContigLengths=ignoreContigLengths,
-                             ET=ET,
-                             plotColorbar=plotColorbar,
-                             extents=extents)
+        return self.plotOnAx(
+            ax,
+            transformedCP,
+            contigGCs,
+            contigLengths,
+            colorMapGC,
+            isLikelyChimeric,
+            fileName=fileName,
+            ignoreContigLengths=ignoreContigLengths,
+            ET=ET,
+            plotColorbar=plotColorbar,
+            extents=extents)
 
     def plotOnAx(self,
-                 ax,
-                 transformedCP,
-                 contigGCs,
-                 contigLengths,
-                 colorMapGC,
-                 isLikelyChimeric,
-                 fileName="",
-                 ignoreContigLengths=False,
-                 plotCentroid=True,
-                 ET=None,
-                 printID=False,
-                 plotColorbar=True,
-                 extents=None):
+        ax,
+        transformedCP,
+        contigGCs,
+        contigLengths,
+        colorMapGC,
+        isLikelyChimeric,
+        fileName="",
+        ignoreContigLengths=False,
+        plotCentroid=True,
+        ET=None,
+        printID=False,
+        plotColorbar=True,
+        extents=None):
         """Plot a bin in a given subplot
 
         If you pass through an EllipsoidTool then it will plot the minimum bounding ellipsoid as well!
