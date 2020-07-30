@@ -148,6 +148,7 @@ class ProfileManager:
                     print("    Loading coverage profiles")
                 self.covProfiles = self.dataManager.getCoverageProfiles(self.dbFileName, indices=self.indices)
                 self.normCoverages = self.dataManager.getNormalisedCoverageProfiles(self.dbFileName, indices=self.indices)
+                self.transformedCP = self.dataManager.getTransformedCoverageProfiles(self.dbFileName, indices=self.indices)
 
                 # from sklearn.decomposition import TruncatedSVD
                 # import pandas as pd

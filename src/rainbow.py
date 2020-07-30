@@ -72,7 +72,6 @@ class Rainbow:
             self.ignore_green = True
 
         self.upperScale = max([self.red_offset, self.green_offset, self.blue_offset])
-
         self.scaleMultiplier = self.upperScale / (self.upper_bound - self.lower_bound)
 
     def getHex(self, val):
