@@ -141,6 +141,7 @@ class GMDataManager:
         db_file_name,
         cutoff,
         timer,
+        bins_file=None,
         kmer_size=4,
         force=False,
         threads=1):
@@ -174,6 +175,12 @@ class GMDataManager:
                 meta_group = h5file.create_group('/', 'meta', 'Associated metadata')
                 transforms_group = h5file.create_group('/', 'transforms', 'Transformed profiles')
 
+                if bins_file is None:
+                    bin_stats = []
+                    bin_data = {}
+                else:
+                    bin_stats, bin_data = self.process_init_bins(bins_file)
+
                 #------------------------
                 # parse contigs
                 #
@@ -201,7 +208,8 @@ class GMDataManager:
 
                 with GM_open(contigs_file, open_mode) as f:
                     try:
-                        cnames, contigs_df, ksigs_df = contig_parser.parse(f, cutoff, kse)
+                        cnames, contigs_df, ksigs_df = contig_parser.parse(
+                            f, cutoff, kse, bin_data=bin_data)
                         num_contigs = len(cnames)
                     except:
                         print('Error parsing contigs')
@@ -365,7 +373,7 @@ class GMDataManager:
                     raise
 
                 # bins
-                self.initBinStats((h5file, meta_group))
+                self.init_bin_stats((h5file, meta_group), bin_stats)
 
                 print("    %s" % timer.getTimeStamp())
 
@@ -426,7 +434,7 @@ class GMDataManager:
         full_record = []
         try:
             with tables.open_file(db_file_name, mode='r') as h5file:
-                full_record = [list(x) for x in h5file.root.links.links.readWhere("contig1 >= 0")]
+                full_record = [list(x) for x in h5file.root.links.links.read_where("contig1 >= 0")]
         except:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
@@ -493,11 +501,11 @@ class GMDataManager:
         try:
             with tables.open_file(db_file_name, mode='r') as h5file:
                 if(np.size(indices) != 0):
-                    return np.array([list(h5file.root.transforms.normCoverage[x]) for x in indices])
+                    return np.array([list(h5file.root.transforms.normCoverage[x]) for x in indices]).flatten()
                 else:
                     if('' == condition):
                         condition = "cid != ''" # no condition breaks everything!
-                    return np.array([list(h5file.root.transforms.normCoverage[x.nrow]) for x in h5file.root.meta.contigs.where(condition)])
+                    return np.array([list(h5file.root.transforms.normCoverage[x.nrow]) for x in h5file.root.meta.contigs.where(condition)]).flatten()
         except:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
@@ -509,11 +517,38 @@ class GMDataManager:
         self.setNumBins(db_file_name, 0)
         self.setBinAssignments(db_file_name, updates={}, nuke=True)
 
-    def initBinStats(self, storage):
+    def process_init_bins(self, bins_file):
+        if bins_file.endswith('.gz'):
+            bins = pd.read_csv(bins_file, compression='gzip', sep='\t')
+        else:
+            bins = pd.read_csv(bins_file, sep='\t')
+
+        bins.columns = ['cname', 'bid']
+        bin_data = bins.set_index('cname').to_dict()['bid']
+
+        bin_stats = []
+        current_bid = None
+        count = 0
+        for bid in bins['bid']:
+            if bid != current_bid:
+                if current_bid is not None:
+                    bin_stats.append((current_bid, count, False))
+                current_bid = bid
+                count = 0
+
+            count += 1
+
+        if current_bid is not None:
+            bin_stats.append((current_bid, count, False))
+
+        return bin_stats, bin_data
+
+    def init_bin_stats(self, storage, bin_stats=[]):
         '''Initialise the bins table
 
         Inputs:
          storage - (hdf5 file handle, hdf5 node), open db and node to write to
+         bin_stats - list of tuples describing the bins (bid, count, is_chimeric)
 
         Outputs:
          None
@@ -521,16 +556,18 @@ class GMDataManager:
         db_desc = [('bid', int),
                    ('numMembers', int),
                    ('isLikelyChimeric', bool)]
-        bd = np.array([], dtype=db_desc)
+
+        bin_stats = np.array(bin_stats, dtype=db_desc)
 
         h5file = storage[0]
         meta_group = storage[1]
 
-        h5file.create_table(meta_group,
-                           'bins',
-                           bd,
-                           title="Bin information",
-                           expectedrows=1)
+        h5file.create_table(
+            meta_group,
+           'bins',
+           bin_stats,
+           title="Bin information",
+           expectedrows=1)
 
     def setBinStats(self, db_file_name, updates):
         """Set bins table
@@ -597,7 +634,7 @@ class GMDataManager:
                 else:
                     if('' == condition):
                         condition = "cid != ''" # no condition breaks everything!
-                    return np.array([list(x)[1] for x in h5file.root.meta.contigs.readWhere(condition)]).ravel()
+                    return np.array([list(x)[1] for x in h5file.root.meta.contigs.read_where(condition)]).ravel()
         except:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
@@ -690,7 +727,7 @@ class GMDataManager:
                 else:
                     if('' == condition):
                         condition = "cid != ''" # no condition breaks everything!
-                    return np.array([list(x)[0] for x in h5file.root.meta.contigs.readWhere(condition)]).ravel()
+                    return np.array([list(x)[0].decode('utf-8') for x in h5file.root.meta.contigs.read_where(condition)]).ravel()
         except:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
@@ -704,7 +741,7 @@ class GMDataManager:
                 else:
                     if('' == condition):
                         condition = "cid != ''" # no condition breaks everything!
-                    return np.array([list(x)[2] for x in h5file.root.meta.contigs.readWhere(condition)]).ravel()
+                    return np.array([list(x)[2] for x in h5file.root.meta.contigs.read_where(condition)]).ravel()
         except:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
@@ -718,7 +755,7 @@ class GMDataManager:
                 else:
                     if('' == condition):
                         condition = "cid != ''" # no condition breaks everything!
-                    return np.array([list(x)[3] for x in h5file.root.meta.contigs.readWhere(condition)]).ravel()
+                    return np.array([list(x)[3] for x in h5file.root.meta.contigs.read_where(condition)]).ravel()
         except:
             print("Error opening DB:",db_file_name, exc_info()[0])
             raise
@@ -1028,10 +1065,8 @@ class GMDataManager:
 
                 num_rows = len(data_arrays[0])
                 for i in range(num_rows):
-                    fh.write(data_converters[0](data_arrays[0][i]))
-                    for j in range(1, num_fields):
-                        fh.write(separator+data_converters[j](data_arrays[j][i]))
-                    fh.write('\n')
+                    fh.write('%s\n' % separator.join(
+                        ['%s' % data_converters[j](data_arrays[j][i]) for j in range(num_fields)]))
         except:
             print("Error opening output file %s for writing" % outFile)
             raise
@@ -1062,15 +1097,20 @@ class ContigParser:
                 yield header, ''.join(seq)
             break
 
-    def parse(self, contig_file, cutoff, kse):
+    def parse(self, contig_file, cutoff, kse, bin_data={}):
         '''Do the heavy lifting of parsing'''
         print("Parsing contigs")
 
         contig_info = {} # save everything here first so we can sort accordingly
         for cname, seq in self.read_fasta(contig_file):
             if len(seq) >= cutoff:
-                contig_info[cname] = (
-                    kse.get_k_sig(seq), len(seq), kse.get_gc(seq))
+
+                if cname in bin_data:
+                    contig_info[cname] = (
+                        kse.get_k_sig(seq), len(seq), kse.get_gc(seq), bin_data[cname])
+                else:
+                    contig_info[cname] = (
+                        kse.get_k_sig(seq), len(seq), kse.get_gc(seq), 0)
 
         # sort the contig names here once!
         cnames = np.array(sorted(contig_info.keys()))
@@ -1084,8 +1124,8 @@ class ContigParser:
             index=cnames)
 
         for cname in cnames:
-            k_sig, length, gc = contig_info[cname]
-            contigs_df.loc[cname] = [cname, 0, length, gc]
+            k_sig, length, gc, bid = contig_info[cname]
+            contigs_df.loc[cname] = [cname, bid, length, gc]
             ksigs_df.loc[cname] = k_sig
 
         return cnames, contigs_df, ksigs_df
