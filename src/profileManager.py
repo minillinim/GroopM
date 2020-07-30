@@ -40,58 +40,21 @@ from colorsys import hsv_to_rgb as htr
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.cm import get_cmap
-
-from numpy import (abs as np_abs,
-                   amax as np_amax,
-                   amin as np_amin,
-                   append as np_append,
-                   arange as np_arange,
-                   arccos as np_arccos,
-                   argmin as np_argmin,
-                   argsort as np_argsort,
-                   array as np_array,
-                   ceil as np_ceil,
-                   concatenate as np_concatenate,
-                   copy as np_copy,
-                   cos as np_cos,
-                   delete as np_delete,
-                   diag as np_diag,
-                   eye as np_eye,
-                   log10 as np_log10,
-                   max as np_max,
-                   mean as np_mean,
-                   median as np_median,
-                   min as np_min,
-                   pi as np_pi,
-                   reshape as np_reshape,
-                   seterr as np_seterr,
-                   shape as np_shape,
-                   sin as np_sin,
-                   sum as np_sum,
-                   size as np_size,
-                   sort as np_sort,
-                   sqrt as np_sqrt,
-                   std as np_std,
-                   transpose as np_transpose,
-                   where as np_where,
-                   zeros as np_zeros)
-from numpy.linalg import norm as np_norm
-#import scipy.ndimage as ndi
+import pandas as pd
+import numpy as np
+np.seterr(all='raise')
 from scipy.spatial.distance import cdist, squareform
 from scipy.spatial import KDTree as kdt
 from scipy.stats import f_oneway, distributions
+from sklearn.decomposition import TruncatedSVD
 
 # GroopM imports
 from .PCA import PCA, Center
 from .mstore import GMDataManager
 from .bin import Bin, mungeCbar
 from . import groopmExceptions as ge
+from .rainbow import Rainbow
 
-np_seterr(all='raise')
-
-###############################################################################
-###############################################################################
-###############################################################################
 ###############################################################################
 
 class ProfileManager:
@@ -107,21 +70,21 @@ class ProfileManager:
 
         # --> NOTE: ALL of the arrays in this section are in sync
         # --> each one holds information for an individual contig
-        self.indices = np_array([])         # indices into the data structure based on condition
-        self.covProfiles = np_array([])     # coverage based coordinates
-        self.transformedCP = np_array([])   # the munged data points
-        self.averageCoverages = np_array([])# average coverage across all stoits
-        self.normCoverages = np_array([])   # norm of the raw coverage vectors
-        self.kmerSigs = np_array([])        # raw kmer signatures
-        self.kmerNormSVD1 = np_array([])    # First SVD of kmer sigs normalized to [0, 1]
-        self.kmerSVDs = np_array([])        # PCs of kmer sigs capturing specified variance
-        self.stoitColNames = np_array([])
-        self.contigNames = np_array([])
-        self.contigLengths = np_array([])
-        self.contigGCs = np_array([])
+        self.indices = np.array([])         # indices into the data structure based on condition
+        self.covProfiles = np.array([])     # coverage based coordinates
+        self.transformedCP = np.array([])   # the munged data points
+        self.averageCoverages = np.array([])# average coverage across all stoits
+        self.normCoverages = np.array([])   # norm of the raw coverage vectors
+        self.kmerSigs = np.array([])        # raw kmer signatures
+        self.kmerNormSVD1 = np.array([])    # First SVD of kmer sigs normalized to [0, 1]
+        self.kmerSVDs = np.array([])        # PCs of kmer sigs capturing specified variance
+        self.stoitColNames = np.array([])
+        self.contigNames = np.array([])
+        self.contigLengths = np.array([])
+        self.contigGCs = np.array([])
         self.colorMapGC = None
 
-        self.binIds = np_array([])          # list of bin IDs
+        self.binIds = np.array([])          # list of bin IDs
         # --> end section
 
         # meta
@@ -146,7 +109,7 @@ class ProfileManager:
         verbose=True,              # many to some output messages
         silent=False,              # some to no output messages
         loadCovProfiles=True,
-        loadRawKmers=False,
+        loadRawKmers=True,
         loadKmerSVDs=True,
         makeColors=True,
         loadContigNames=True,
@@ -185,10 +148,47 @@ class ProfileManager:
                     print("    Loading coverage profiles")
                 self.covProfiles = self.dataManager.getCoverageProfiles(self.dbFileName, indices=self.indices)
                 self.normCoverages = self.dataManager.getNormalisedCoverageProfiles(self.dbFileName, indices=self.indices)
-                self.transformedCP = self.dataManager.getTransformedCoverageProfiles(self.dbFileName, indices=self.indices)
+
+                # from sklearn.decomposition import TruncatedSVD
+                # import pandas as pd
+                # import numpy as np
+                # num_svds = 3
+                # coverages_df = pd.DataFrame(self.covProfiles)
+                # self._transformedCP = np.array(TruncatedSVD(
+                #     n_components=num_svds,
+                #     random_state=42).fit_transform(coverages_df))
+                # self._transformedCP[:,0] -= self._transformedCP.min(axis=0)[0]
+                #
+
+                # ccf = np.corrcoef(np.transpose(self.covProfiles))
+                # print(ccf)
+                #
+                # import code
+                # code.interact(local=locals())
+
+                self._transformedCP = self.covProfiles
+                # self._transformedCP -= self._transformedCP.min(axis=0)
+                # self._transformedCP /= self._transformedCP.max(axis=0)
+                # self._transformedCP *= 1000
+
+                # total_sums = np.argsort(np.sum(self._transformedCP, axis=0))
+
+                self.transformedCP = self._transformedCP[:,[3,2,6]]
+                # print(self._transformedCP)
+                #
+                # # # to spherical polar
+                # self.transformedCP = np.zeros(np.shape(self._transformedCP))
+                # self.transformedCP[:,2] = np.linalg.norm(self._transformedCP, axis=1)
+                # non_zero_xs = np.where(self._transformedCP[:,1] != 0)[0]
+                # self.transformedCP[non_zero_xs,0] = np.arctan(
+                #     self._transformedCP[non_zero_xs,2] / self._transformedCP[non_zero_xs,1])
+                # non_zero_phros = np.where(self.transformedCP[:,0] != 0)[0]
+                # self.transformedCP[non_zero_phros,1] = self._transformedCP[non_zero_phros,0] / self.transformedCP[non_zero_phros,2]
+                #
+                # self.transformedCP[:,2] *= self.transformedCP[:,2]
 
                 # work out average coverages
-                self.averageCoverages = np_array([sum(i)/self.numStoits for i in self.covProfiles])
+                self.averageCoverages = np.array([sum(i)/self.numStoits for i in self.covProfiles])
 
             if loadRawKmers:
                 if(verbose):
@@ -201,9 +201,9 @@ class ProfileManager:
                 if(verbose):
                     print("    Loading SVD kmer sigs (" + str(len(self.kmerSVDs[0])) + " dimensional space)")
 
-                self.kmerNormPC1 = np_copy(self.kmerSVDs[:,0])
-                self.kmerNormPC1 -= self.kmerNormPC1.min()
-                self.kmerNormPC1 /= self.kmerNormPC1.max()
+                self.kmerNormSVD1 = np.copy(self.kmerSVDs[:,0])
+                self.kmerNormSVD1 -= self.kmerNormSVD1.min()
+                self.kmerNormSVD1 /= self.kmerNormSVD1.max()
 
             if(loadContigNames):
                 if(verbose):
@@ -218,7 +218,7 @@ class ProfileManager:
             if(loadContigGCs):
                 self.contigGCs = self.dataManager.getContigGCs(self.dbFileName, indices=self.indices)
                 if(verbose):
-                    print("    Loading contig GC ratios (Average GC: %0.3f)" % ( np_mean(self.contigGCs) ))
+                    print("    Loading contig GC ratios (Average GC: %0.3f)" % ( np.mean(self.contigGCs) ))
 
             if(makeColors):
                 if(verbose):
@@ -258,7 +258,7 @@ class ProfileManager:
                         self.binnedRowIndices[i] = True
             else:
                 # we need zeros as bin indicies then...
-                self.binIds = np_zeros(len(self.indices))
+                self.binIds = np.zeros(len(self.indices))
 
             if(loadLinks):
                 self.loadLinks()
@@ -275,15 +275,15 @@ class ProfileManager:
         Be sure that deadRowIndices are sorted ascending
         """
         # strip out the other values
-        self.indices = np_delete(self.indices, deadRowIndices, axis=0)
-        self.covProfiles = np_delete(self.covProfiles, deadRowIndices, axis=0)
-        self.transformedCP = np_delete(self.transformedCP, deadRowIndices, axis=0)
-        self.contigNames = np_delete(self.contigNames, deadRowIndices, axis=0)
-        self.contigLengths = np_delete(self.contigLengths, deadRowIndices, axis=0)
-        self.contigGCs = np_delete(self.contigGCs, deadRowIndices, axis=0)
-        self.kmerSVDs = np_delete(self.kmerSVDs, deadRowIndices, axis=0)
-        #self.kmerSigs = np_delete(self.kmerSigs, deadRowIndices, axis=0)
-        self.binIds = np_delete(self.binIds, deadRowIndices, axis=0)
+        self.indices = np.delete(self.indices, deadRowIndices, axis=0)
+        self.covProfiles = np.delete(self.covProfiles, deadRowIndices, axis=0)
+        self.transformedCP = np.delete(self.transformedCP, deadRowIndices, axis=0)
+        self.contigNames = np.delete(self.contigNames, deadRowIndices, axis=0)
+        self.contigLengths = np.delete(self.contigLengths, deadRowIndices, axis=0)
+        self.contigGCs = np.delete(self.contigGCs, deadRowIndices, axis=0)
+        self.kmerSVDs = np.delete(self.kmerSVDs, deadRowIndices, axis=0)
+        #self.kmerSigs = np.delete(self.kmerSigs, deadRowIndices, axis=0)
+        self.binIds = np.delete(self.binIds, deadRowIndices, axis=0)
 
 #------------------------------------------------------------------------------
 # GET / SET
@@ -314,7 +314,7 @@ class ProfileManager:
 
     def getStoitColNames(self):
         """return the value of stoitColNames in the metadata tables"""
-        return np_array(self.dataManager.getStoitColNames(self.dbFileName).split(","))
+        return np.array(self.dataManager.getStoitColNames(self.dbFileName).split(","))
 
     def isClustered(self):
         """Has the data been clustered already"""
@@ -413,7 +413,7 @@ class ProfileManager:
     def createColorMapHSV(self):
       S = 1.0
       V = 1.0
-      return LinearSegmentedColormap.from_list('GC', [htr((1.0 + np_sin(np_pi * (val/1000.0) - np_pi/2))/2., S, V) for val in range(0, 1000)], N=1000)
+      return LinearSegmentedColormap.from_list('GC', [htr((1.0 + np.sin(np.pi * (val/1000.0) - np.pi/2))/2., S, V) for val in range(0, 1000)], N=1000)
 
     def setColorMap(self, colorMapStr):
         if colorMapStr == 'HSV':
@@ -486,7 +486,7 @@ class ProfileManager:
         if ignoreContigLengths:
             sc = ax1.scatter(self.transformedCP[:,0], self.transformedCP[:,1], self.transformedCP[:,2], edgecolors='none', c=self.contigGCs, cmap=self.colorMapGC, vmin=0.0, vmax=1.0, s=10, marker='.')
         else:
-            sc = ax1.scatter(self.transformedCP[:,0], self.transformedCP[:,1], self.transformedCP[:,2], edgecolors='k', c=self.contigGCs, cmap=self.colorMapGC, vmin=0.0, vmax=1.0, s=np_sqrt(self.contigLengths), marker='.')
+            sc = ax1.scatter(self.transformedCP[:,0], self.transformedCP[:,1], self.transformedCP[:,2], edgecolors='k', c=self.contigGCs, cmap=self.colorMapGC, vmin=0.0, vmax=1.0, s=np.sqrt(self.contigLengths), marker='.')
         sc.set_edgecolors = sc.set_facecolors = lambda *args:None  # disable depth transparency effect
 
         try:
@@ -499,16 +499,79 @@ class ProfileManager:
 
     def plotAll(self, timer, coreCut, ignoreContigLengths=False):
         """Plot all contigs over a certain length which are unbinned"""
-        self.loadData(timer, "((length >= "+str(coreCut)+"))")
+        self.loadData(
+            timer,
+            "((length >= "+str(coreCut)+"))",
+            loadRawKmers=False,
+            loadContigNames=False,
+            loadContigLengths=False,
+            loadContigGCs=False,
+            makeColors=False)
+
+        import numpy as np
+
+        coloring = [int(i) for i in self.kmerSVDs[:,0] * 100]
+
+        print(np.min(coloring), np.max(coloring))
+        rainbow = Rainbow(np.min(coloring), np.max(coloring), 100, type='rgb')
+
+        # import code
+        # code.interact(local=locals())
+
+        ax = plt.subplot(111)
+        Xs = range(len(self.stoitColNames)-2)
+        for idx, row in enumerate(self.covProfiles):
+            ax.plot(Xs, np.sqrt(row[2:]), rainbow.getHex(coloring[idx]))
+
+        plt.show()
+        return
+
+
+        sorted_idxs = np.argsort(np.sum(self.covProfiles, axis=0))
+        self.covProfiles = self.covProfiles[:,sorted_idxs]
+        num_points = len(self.covProfiles)
+        num_cols = len(self.stoitColNames) - 1
+        Xs = range(num_cols-2)
+        diffs = np.zeros((num_points, num_cols))
+        midpoints = np.zeros((num_points, num_cols))
+        for i in range(1, num_cols):
+            diffs[:,i-1] = self.covProfiles[:,i-1] - self.covProfiles[:,i]
+            midpoints[:,i-1] = (self.covProfiles[:,i-1] + self.covProfiles[:,i]) / 2.
+
+        ax = plt.subplot(211)
+
+        for idx, diff in enumerate(diffs):
+            ax.plot(Xs, diff, rainbow.getHex(self.contigGCs[idx]))
+
+        ax = plt.subplot(212)
+
+        for idx, midpoint in enumerate(midpoints):
+            ax.plot(Xs, midpoint, rainbow.getHex(self.contigGCs[idx]))
+
+        plt.show()
+        return
+
+        import numpy as np
+        non_zero_zs = list(range(len(self.transformedCP[:,0])))#np.where(self.transformedCP[:,2] > 500)[0]
+
+    def _plotAll(self, timer, coreCut, ignoreContigLengths=False):
+        """Plot all contigs over a certain length which are unbinned"""
+        self.loadData(
+            timer,
+            "((length >= "+str(coreCut)+"))",
+            loadRawKmers=False,
+            loadContigNames=False)
+
         fig = plt.figure()
         ax1 = fig.add_subplot(111, projection='3d')
+
         if ignoreContigLengths:
             sc = ax1.scatter(
-                self.transformedCP[:,0],
-                self.transformedCP[:,1],
-                self.transformedCP[:,2],
+                self.transformedCP[:,0][non_zero_zs],
+                self.transformedCP[:,1][non_zero_zs],
+                self.transformedCP[:,2][non_zero_zs],
                 edgecolors='none',
-                c=self.contigGCs,
+                c=self.contigGCs[non_zero_zs],
                 cmap=self.colorMapGC,
                 vmin=0.0,
                 vmax=1.0,
@@ -516,16 +579,16 @@ class ProfileManager:
                 s=10.)
         else:
             sc = ax1.scatter(
-                self.transformedCP[:,0],
-                self.transformedCP[:,1],
-                self.transformedCP[:,2],
+                self.transformedCP[:,0][non_zero_zs],
+                self.transformedCP[:,1][non_zero_zs],
+                self.transformedCP[:,2][non_zero_zs],
                 edgecolors='k',
-                c=self.contigGCs,
+                c=self.contigGCs[non_zero_zs],
                 cmap=self.colorMapGC,
                 vmin=0.0,
                 vmax=1.0,
                 marker='.',
-                s=np_sqrt(self.contigLengths))
+                s=np.sqrt(self.contigLengths[non_zero_zs]))
 
         sc.set_edgecolors = sc.set_facecolors = lambda *args:None  # disable depth transparency effect
 
@@ -533,9 +596,16 @@ class ProfileManager:
         cbar.ax.tick_params()
         cbar.ax.set_title("% GC", size=10)
         cbar.set_ticks([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
-        #import IPython; IPython.embed()
         cbar.ax.set_ylim([0.15, 0.85])
         mungeCbar(cbar)
+
+
+        ax1.azim = 0
+        ax1.elev = 0
+
+        ax1.set_xlabel('ax1')
+        ax1.set_ylabel('ax2')
+        ax1.set_zlabel('ax3')
 
         try:
             plt.show()
@@ -544,7 +614,6 @@ class ProfileManager:
             print("Error showing image", exc_info()[0])
             raise
         del fig
-
 
     def plotTransViews(self, tag="fordens"):
         """Plot top, side and front views of the transformed data"""
@@ -651,7 +720,7 @@ class ProfileManager:
             ax = fig.add_subplot(111, projection='3d')
             if len(restrictedBids) == 0:
                 if highlight is None:
-                    print("BF:", np_shape(self.transformedCP))
+                    print("BF:", np.shape(self.transformedCP))
                     if ignoreContigLengths:
                         sc = ax.scatter(self.transformedCP[:,0],
                                    self.transformedCP[:,1],
@@ -672,7 +741,7 @@ class ProfileManager:
                                    cmap=self.colorMapGC,
                                    vmin=0.0,
                                    vmax=1.0,
-                                   s=np_sqrt(self.contigLengths),
+                                   s=np.sqrt(self.contigLengths),
                                    marker='.')
                     sc.set_edgecolors = sc.set_facecolors = lambda *args:None # disable depth transparency effect
                 else:
@@ -692,22 +761,22 @@ class ProfileManager:
                     sc.set_edgecolors = sc.set_facecolors = lambda *args:None # disable depth transparency effect
                     """
                     # now replot the highlighted guys
-                    disp_vals = np_array([])
-                    disp_GCs = np_array([])
+                    disp_vals = np.array([])
+                    disp_GCs = np.array([])
 
                     thrower = {}
-                    hide_vals = np_array([])
-                    hide_GCs = np_array([])
+                    hide_vals = np.array([])
+                    hide_GCs = np.array([])
 
                     num_points = 0
                     for bin in highlight:
                         for row_index in bin.rowIndices:
                             num_points += 1
-                            disp_vals = np_append(disp_vals, self.transformedCP[row_index])
-                            disp_GCs = np_append(disp_GCs, self.contigGCs[row_index])
+                            disp_vals = np.append(disp_vals, self.transformedCP[row_index])
+                            disp_GCs = np.append(disp_GCs, self.contigGCs[row_index])
                             thrower[row_index] = False
                     # reshape
-                    disp_vals = np_reshape(disp_vals, (num_points, 3))
+                    disp_vals = np.reshape(disp_vals, (num_points, 3))
 
                     num_points = 0
                     for i in range(len(self.indices)):
@@ -715,10 +784,10 @@ class ProfileManager:
                             thrower[i]
                         except KeyError:
                             num_points += 1
-                            hide_vals = np_append(hide_vals, self.transformedCP[i])
-                            hide_GCs = np_append(hide_GCs, self.contigGCs[i])
+                            hide_vals = np.append(hide_vals, self.transformedCP[i])
+                            hide_GCs = np.append(hide_GCs, self.contigGCs[i])
                     # reshape
-                    hide_vals = np_reshape(hide_vals, (num_points, 3))
+                    hide_vals = np.reshape(hide_vals, (num_points, 3))
 
                     sc = ax.scatter(hide_vals[:,0],
                                     hide_vals[:,1],
@@ -745,7 +814,7 @@ class ProfileManager:
                                     marker='.')
                     sc.set_edgecolors = sc.set_facecolors = lambda *args:None # disable depth transparency effect
 
-                    print(np_shape(disp_vals), np_shape(hide_vals), np_shape(self.transformedCP))
+                    print(np.shape(disp_vals), np.shape(hide_vals), np.shape(self.transformedCP))
 
                 # render color bar
                 cbar = plt.colorbar(sc, shrink=0.5)
@@ -755,17 +824,17 @@ class ProfileManager:
                 cbar.ax.set_ylim([0.15, 0.85])
                 mungeCbar(cbar)
             else:
-                r_trans = np_array([])
-                r_cols=np_array([])
+                r_trans = np.array([])
+                r_cols=np.array([])
                 num_added = 0
                 for i in range(len(self.indices)):
                     if self.binIds[i] not in restrictedBids:
-                        r_trans = np_append(r_trans, self.transformedCP[i])
-                        r_cols = np_append(r_cols, self.contigGCs[i])
+                        r_trans = np.append(r_trans, self.transformedCP[i])
+                        r_cols = np.append(r_cols, self.contigGCs[i])
                         num_added += 1
-                r_trans = np_reshape(r_trans, (num_added,3))
-                print(np_shape(r_trans))
-                #r_cols = np_reshape(r_cols, (num_added,3))
+                r_trans = np.reshape(r_trans, (num_added,3))
+                print(np.shape(r_trans))
+                #r_cols = np.reshape(r_cols, (num_added,3))
                 sc = ax.scatter(r_trans[:,0],
                                 r_trans[:,1],
                                 r_trans[:,2],

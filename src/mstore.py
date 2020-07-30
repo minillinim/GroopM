@@ -45,6 +45,8 @@ from scipy.spatial.distance import cdist, squareform
 
 # GroopM imports
 from .ksig import KmerSigEngine
+from sklearn import preprocessing
+from sklearn.decomposition import TruncatedSVD
 
 
 class GMDataManager:
@@ -281,29 +283,24 @@ class GMDataManager:
                     raise
 
                 # transformed coverages
-                trans_cov_db_desc = [('x', float), ('y', float), ('z', float)]
-                import umap
-                from sklearn import preprocessing
-                min_max_scaler = preprocessing.MinMaxScaler()
-                coverages_scaled = min_max_scaler.fit_transform(
-                    coverages_df.values)
+                if num_stoits > 4:
+                    num_coverage_svds = 4
+                    trans_cov_db_desc = [
+                        ('x', float), ('y', float), ('z', float), ('zz', float)]
 
-                umapd_coverages = np.array(umap.UMAP(
-                    n_neighbors=5,
-                    min_dist=0.3,
-                    n_components=3).fit_transform(coverages_scaled))
-
-                umapd_coverages -= umapd_coverages.min(axis=0)
-                umapd_coverages /= umapd_coverages.max(axis=0)
-                umapd_coverages = np.array(
-                    [tuple(i) for i in umapd_coverages],
-                    dtype=trans_cov_db_desc)
+                    min_max_scaler = preprocessing.MinMaxScaler()
+                    svd_coverages = np.array(
+                        [tuple(i) for i in min_max_scaler.fit_transform(
+                            TruncatedSVD(
+                                n_components=num_coverage_svds,
+                                random_state=42).fit_transform(coverages_df))],
+                        dtype=trans_cov_db_desc)
 
                 try:
                     h5file.create_table(
                         transforms_group,
                         'transCoverage',
-                        umapd_coverages,
+                        svd_coverages,
                         title="Transformed coverage",
                         expectedrows=num_contigs)
                 except:
@@ -331,7 +328,6 @@ class GMDataManager:
                 for i in range(num_svds):
                   svd_ksigs_db_desc.append(('svd%s'% (i+1), float))
 
-                from sklearn.decomposition import TruncatedSVD
                 ksigs_svd = np.array(TruncatedSVD(
                     n_components=num_svds,
                     random_state=42).fit_transform(ksigs_df))
@@ -398,7 +394,7 @@ class GMDataManager:
         print("****************************************************************")
         print("Data loaded successfully!")
         print(" ->",num_contigs,"contigs")
-        print(" ->",len(stoit_col_names),"BAM files")
+        print(" ->",num_stoits,"BAM files")
         print("Written to: '"+db_file_name+"'")
         print("****************************************************************")
         print("    %s" % timer.getTimeStamp())

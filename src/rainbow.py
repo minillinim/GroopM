@@ -26,126 +26,90 @@
 
 __author__ = "Michael Imelfort"
 __copyright__ = "Copyright 2012-2020"
-__credits__ = ["Michael Imelfort"]
 __license__ = "GPL3"
 __version__ = "0.2.1"
 __maintainer__ = "Michael Imelfort"
 __email__ = "michael.imelfort@gmail.com"
-__status__ = "Released"
-
-###############################################################################
-
 
 import math
 
-
-###############################################################################
-###############################################################################
-###############################################################################
-###############################################################################
-
 class Rainbow:
-    def __init__(self, lb, ub, res, type="rb"):
+    def __init__(self, lb, ub, res, type='rb'):
         """
         Specify the upper and lower bounds for your data.
         resolution refers to the number of bins which are available in this space
-        Supports four heatmap types is red-blue, blue-red, red-green-blue and blue-green-red
+        Supports four heatmap types: red-blue, blue-red, red-green-blue and blue-green-red
         """
 
-        # constants
-        self.RB_lower_offset = 0.5
-        self.RB_divisor = (2.0/3.0)
-        self.RB_ERROR_COLOUR = [0,0,0]
-
-        # set the limits
-        self.lowerBound = lb
-        self.upperBound = ub
+        self.lower_bound = lb
+        self.upper_bound = ub
         self.resolution = res
-        self.tickSize = (self.upperBound - self.lowerBound)/(self.resolution - 1)
+        self.tick_size = \
+            (self.upper_bound - self.lower_bound) / (self.resolution - 1)
 
-        # set the type, red-blue by default
-        self.type = type
-        self.redOffset = 0.0
-        self.greenOffset = self.RB_divisor * math.pi * 2.0
-        self.blueOffset = self.RB_divisor * math.pi
+        self.RB_lower_offset = 0.5
+        self.RB_divisor = (2./3.)
+        self.rotation_third = (2. * math.pi) / 3.
+        self.RB_ERROR_COLOUR = (0, 0, 0)
 
-        self.ignoreRed = False
-        self.ignoreGreen = True
-        self.ignoreBlue = False
+        self.ignore_red = self.ignore_green = self.ignore_blue = False
+        self.red_offset = self.green_offset = self.blue_offset = 0.
 
-        self.lowerScale = 0.0
-        self.upperScale = self.RB_divisor * math.pi
+        if (type == 'rb'):
+            self.blue_offset = self.rotation_third
+            self.ignore_green = True
 
-        if(self.type == "rbg"): # red-blue-green
-            self.redOffset = 0.0
-            self.greenOffset = self.RB_divisor * math.pi * 2.0
-            self.blueOffset = self.RB_divisor * math.pi
+        elif(type == "rbg"): # red-blue-green
+            self.green_offset = self.rotation_third * 2.
+            self.blue_offset = self.rotation_third
 
-            self.ignoreRed = False
-            self.ignoreGreen = False
-            self.ignoreBlue = False
+        elif(type == "gbr"): # green-blue-red
+            self.red_offset = self.rotation_third * 2.
+            self.blue_offset = self.rotation_third
 
-            self.lowerScale = 0.0
-            self.upperScale = (self.RB_divisor * math.pi * 2.0)
+        elif(type == "br"): # blue-red
+            self.red_offset = self.rotation_third
+            self.ignore_green = True
 
-        elif(self.type == "gbr"): # green-blue-red
-            self.redOffset = self.RB_divisor * math.pi * 2.0
-            self.greenOffset = 0.0
-            self.blueOffset = self.RB_divisor * math.pi
+        self.upperScale = max([self.red_offset, self.green_offset, self.blue_offset])
 
-            self.ignoreRed = False
-            self.ignoreGreen = False
-            self.ignoreBlue = False
+        self.scaleMultiplier = self.upperScale / (self.upper_bound - self.lower_bound)
 
-            self.lowerScale = 0.0
-            self.upperScale = (self.RB_divisor * math.pi * 2.0)
-
-        elif(self.type == "br"): # blue-red
-            self.redOffset = self.RB_divisor * math.pi
-            self.greenOffset = self.RB_divisor * math.pi * 2.0
-            self.blueOffset = 0.0
-
-            self.ignoreRed = False
-            self.ignoreGreen = True
-            self.ignoreBlue = False
-
-            self.lowerScale = 0.0
-            self.upperScale = (self.RB_divisor * math.pi)
-
-        self.scaleMultiplier = (self.upperScale - self.lowerScale)/(self.upperBound - self.lowerBound)
-
-    def getValue(self, val):
-        """Get a raw value, not a color"""
-        return (math.cos(val) + self.RB_lower_offset) * self.RB_divisor
+    def getHex(self, val):
+        return '#%s' % ''.join([format(_val, '02X') for _val in self.getColor(val)])
 
     def getColor(self, val):
         """Return a color for the given value.
 
         If nothing makes sense. return black
         """
-        if(val > self.upperBound or val < self.lowerBound):
+        if(val > self.upper_bound or val < self.lower_bound):
             return self.RB_ERROR_COLOUR
 
         # normalise the value to suit the ticks
-        normalised_value = round(val/self.tickSize) * self.tickSize
+        normalised_value = round(val / self.tick_size) * self.tick_size
 
         # map the normalised value onto the horizontal scale
-        scaled_value = (normalised_value - self.lowerBound) * self.scaleMultiplier + self.lowerScale
+        scaled_value = (normalised_value - self.lower_bound) * self.scaleMultiplier
 
         red = 0
         green = 0
         blue = 0
 
-        if(not self.ignoreRed):
-            red = int(round(self.getValue(scaled_value - self.redOffset) * 255))
-        if(not self.ignoreGreen):
-            green = int(round(self.getValue(scaled_value - self.greenOffset) * 255))
-        if(not self.ignoreBlue):
-            blue = int(round(self.getValue(scaled_value - self.blueOffset) * 255))
+        def scaled_2_rgb(scaled_value, offset):
+            val = int(round(self.getValue(scaled_value - offset) * 255))
+            if val < 0: return 0
+            return val
+
+        if not self.ignore_red:
+            red = scaled_2_rgb(scaled_value, self.red_offset)
+        if not self.ignore_green:
+            green = scaled_2_rgb(scaled_value, self.green_offset)
+        if not self.ignore_blue:
+            blue = scaled_2_rgb(scaled_value, self.blue_offset)
 
         return (red, green, blue)
 
-###############################################################################
-###############################################################################
-###############################################################################
-###############################################################################
+    def getValue(self, val):
+        """Get a raw value, not a color"""
+        return (math.cos(val) + self.RB_lower_offset) * self.RB_divisor

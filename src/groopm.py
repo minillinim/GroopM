@@ -46,6 +46,8 @@ from . import groopmUtils
 from . import groopmTimekeeper as gtime
 from .groopmExceptions import ExtractModeNotAppropriateException
 from .mstore import GMDataManager
+from .profileManager import ProfileManager
+from .paraAxes import ParaAxes
 
 ###############################################################################
 ###############################################################################
@@ -103,6 +105,7 @@ class GroopMOptionsParser():
                 options.dbname,
                 options.cutoff,
                 timer,
+                bins_file=options.bins,
                 force=options.force,
                 threads=options.threads)
 
@@ -115,19 +118,7 @@ class GroopMOptionsParser():
             print("*******************************************************************************")
             print(" [[GroopM %s]] Running in core creation mode..." % self.GMVersion)
             print("*******************************************************************************")
-            CE = cluster.ClusterEngine(options.dbname,
-                                       timer,
-                                       force=options.force,
-                                       finalPlot=options.plot,
-                                       plot=options.multiplot,
-                                       minSize=options.size,
-                                       minVol=options.bp)
-            if options.graphfile is None:
-                gf = ""
-            else:
-                gf=options.graphfile
-            CE.makeCores(coreCut=options.cutoff,
-                         gf=gf)
+
 
         elif(options.subparser_name == 'refine'):
             # refine bin cores
@@ -251,16 +242,25 @@ class GroopMOptionsParser():
 
             BM.setColorMap(options.cm)
 
-            BM.plotBins(FNPrefix=options.tag,
-                        plotEllipsoid=True,
-                        ignoreContigLengths=options.points,
-                        folder=options.folder)
+            BM.plotBins(
+                FNPrefix=options.tag,
+                plotEllipsoid=True,
+                ignoreContigLengths=options.points,
+                folder=options.folder)
 
         elif(options.subparser_name == 'explore'):
             # make bin cores
             print("*******************************************************************************")
-            print(" [[GroopM %s]] Running in bin '%s' explorer mode..." % (self.GMVersion, options.mode))
+            print(" [[GroopM %s]] Running in '%s' explorer mode..." % (self.GMVersion, options.mode))
             print("*******************************************************************************")
+
+            if (options.mode == 'parallel'):
+                PM = ProfileManager(options.dbname)
+                AXC = ParaAxes(PM)
+                AXC.make_axes(timer, options.cutoff)
+                AXC.make_density()
+                return
+
             bids = []
             if options.bids is not None:
                 bids = options.bids
@@ -271,7 +271,7 @@ class GroopMOptionsParser():
             if(options.mode == 'binpoints'):
                 BE.plotPoints(timer)
             elif(options.mode == 'binids'):
-                BE.plotIds(timer)
+                BE.plotIds(timer, ignoreRanges=True)
             elif(options.mode == 'allcontigs'):
                 BE.plotContigs(timer, coreCut=options.cutoff, all=True)
             elif(options.mode == 'unbinnedcontigs'):

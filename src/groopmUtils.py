@@ -546,14 +546,17 @@ class BinExplorer:
         """plot contigs"""
         if all:
             print("Plotting all contigs")
-            self.PM.plotAll(timer, coreCut, transform=self.transform, ignoreContigLengths=self.ignoreContigLengths)
+            self.PM.plotAll(
+                timer,
+                coreCut,
+                ignoreContigLengths=self.ignoreContigLengths)
         else:
-            self.BM.loadBins(timer,
-                             makeBins=True,
-                             silent=False,
-                             bids=self.bids,
-                             transform=self.transform,
-                             cutOff=coreCut)
+            self.BM.loadBins(
+                timer,
+                makeBins=True,
+                silent=False,
+                bids=self.bids,
+                cutOff=coreCut)
             if len(self.BM.bins) == 0:
                 print("Sorry, no bins to plot")
             else:
@@ -561,17 +564,21 @@ class BinExplorer:
                 self.BM.setColorMap(self.cmString)
                 if self.bids == []:
                     self.bids = self.BM.getBids()
-                self.BM.plotMultipleBins([self.bids], squash=True, ignoreContigLengths=self.ignoreContigLengths)
+
+                self.BM.plotMultipleBins(
+                    [self.bids],
+                    squash=True,
+                    ignoreContigLengths=self.ignoreContigLengths)
 
     def plotBinAssignents(self, timer, coreCut):
         """visualise bin assignments"""
-        self.BM.loadBins(timer,
-                         makeBins=True,
-                         getUnbinned=True,
-                         silent=False,
-                         bids=self.bids,
-                         cutOff=coreCut,
-                         transform=self.transform)
+        self.BM.loadBins(
+            timer,
+            makeBins=True,
+            getUnbinned=True,
+            silent=False,
+            bids=self.bids,
+            cutOff=coreCut)
         if len(self.BM.bins) == 0:
             print("Sorry, no bins to plot")
         else:
@@ -670,12 +677,12 @@ class BinExplorer:
 
     def plotPoints(self, timer):
         """plot points"""
-        self.BM.loadBins(timer,
-                         makeBins=True,
-                         silent=False,
-                         bids=self.bids,
-                         transform=self.transform,
-                         cutOff=coreCut)
+        self.BM.loadBins(
+            timer,
+            makeBins=True,
+            silent=False,
+            bids=self.bids,
+            cutOff=coreCut)
         if len(self.BM.bins) == 0:
             print("Sorry, no bins to plot")
         else:
@@ -695,13 +702,13 @@ class BinExplorer:
         if self.transform:
             self.PM2.transformCP(timer)
 
-        self.BM.loadBins(timer,
-                         makeBins=True,
-                         loadContigNames=False,
-                         bids=self.bids,
-                         silent=False,
-                         transform=self.transform,
-                         cutOff=coreCut)
+        self.BM.loadBins(
+            timer,
+            makeBins=True,
+            loadContigNames=False,
+            bids=self.bids,
+            silent=False,
+            cutOff=coreCut)
 
         self.PM2.setColorMap(self.cmString)
         self.BM.setColorMap(self.cmString)
@@ -713,7 +720,7 @@ class BinExplorer:
             (bin_centroid_points, bin_centroid_colors, bin_centroid_gc, bin_ids) = self.BM.findCoreCentres()
             self.plotCoresVsContigs(bin_centroid_points, bin_centroid_colors)
 
-    def plotIds(self, timer):
+    def plotIds(self, timer, ignoreRanges=False):
         """Make a 3d plot of the bins but use IDs instead of points
 
         This function will help users know which bins to merge
@@ -728,7 +735,7 @@ class BinExplorer:
         else:
             print("Plotting bin IDs")
             self.BM.setColorMap(self.cmString)
-            self.BM.plotBinIds()
+            self.BM.plotBinIds(ignoreRanges=ignoreRanges)
 
     def plotUnbinned(self, timer, coreCut):
         """Plot all contigs over a certain length which are unbinned"""
@@ -755,12 +762,12 @@ class BinExplorer:
 
     def plotTogether(self, timer, coreCut, doMers=False):
         """Plot all bins in ellipses on one normal image"""
-        self.BM.loadBins(timer,
-                         makeBins=True,
-                         silent=False,
-                         bids=self.bids,
-                         transform=self.transform,
-                         cutOff=coreCut)
+        self.BM.loadBins(
+            timer,
+            makeBins=True,
+            silent=False,
+            bids=self.bids,
+            cutOff=coreCut)
         if len(self.BM.bins) == 0:
             print("Sorry, no bins to plot")
         else:
@@ -770,10 +777,11 @@ class BinExplorer:
                 p_bids = self.BM.getBids()
             else:
                 p_bids = self.bids
-            self.BM.plotSelectBins(p_bids,
-                                   plotMers=doMers,
-                                   plotEllipsoid=True,
-                                   ignoreContigLengths=self.ignoreContigLengths)
+            self.BM.plotSelectBins(
+                p_bids,
+                plotMers=doMers,
+                plotEllipsoid=True,
+                ignoreContigLengths=self.ignoreContigLengths)
 
 
 #------------------------------------------------------------------------------
