@@ -255,10 +255,19 @@ class GroopMOptionsParser():
             print("*******************************************************************************")
 
             if (options.mode == 'parallel'):
-                PM = ProfileManager(options.dbname)
-                AXC = ParaAxes(PM)
-                AXC.make_axes(timer, options.cutoff)
-                AXC.make_density()
+                pm = ProfileManager(options.dbname)
+                pm.loadData(
+                    timer,
+                    "(length >= %d) " % options.cutoff,
+                    loadRawKmers=False,
+                    makeColors=False,
+                    loadContigNames=False,
+                    loadContigGCs=False,
+                    verbose=False,
+                    silent=True)
+
+                AXC = ParaAxes(pm)
+                AXC.plot()
                 return
 
             bids = []

@@ -149,46 +149,6 @@ class ProfileManager:
                 self.covProfiles = self.dataManager.getCoverageProfiles(self.dbFileName, indices=self.indices)
                 self.normCoverages = self.dataManager.getNormalisedCoverageProfiles(self.dbFileName, indices=self.indices)
                 self.transformedCP = self.dataManager.getTransformedCoverageProfiles(self.dbFileName, indices=self.indices)
-
-                # from sklearn.decomposition import TruncatedSVD
-                # import pandas as pd
-                # import numpy as np
-                # num_svds = 3
-                # coverages_df = pd.DataFrame(self.covProfiles)
-                # self._transformedCP = np.array(TruncatedSVD(
-                #     n_components=num_svds,
-                #     random_state=42).fit_transform(coverages_df))
-                # self._transformedCP[:,0] -= self._transformedCP.min(axis=0)[0]
-                #
-
-                # ccf = np.corrcoef(np.transpose(self.covProfiles))
-                # print(ccf)
-                #
-                # import code
-                # code.interact(local=locals())
-
-                self._transformedCP = self.covProfiles
-                # self._transformedCP -= self._transformedCP.min(axis=0)
-                # self._transformedCP /= self._transformedCP.max(axis=0)
-                # self._transformedCP *= 1000
-
-                # total_sums = np.argsort(np.sum(self._transformedCP, axis=0))
-
-                self.transformedCP = self._transformedCP[:,[3,2,6]]
-                # print(self._transformedCP)
-                #
-                # # # to spherical polar
-                # self.transformedCP = np.zeros(np.shape(self._transformedCP))
-                # self.transformedCP[:,2] = np.linalg.norm(self._transformedCP, axis=1)
-                # non_zero_xs = np.where(self._transformedCP[:,1] != 0)[0]
-                # self.transformedCP[non_zero_xs,0] = np.arctan(
-                #     self._transformedCP[non_zero_xs,2] / self._transformedCP[non_zero_xs,1])
-                # non_zero_phros = np.where(self.transformedCP[:,0] != 0)[0]
-                # self.transformedCP[non_zero_phros,1] = self._transformedCP[non_zero_phros,0] / self.transformedCP[non_zero_phros,2]
-                #
-                # self.transformedCP[:,2] *= self.transformedCP[:,2]
-
-                # work out average coverages
                 self.averageCoverages = np.array([sum(i)/self.numStoits for i in self.covProfiles])
 
             if loadRawKmers:
