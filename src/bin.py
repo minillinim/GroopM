@@ -479,6 +479,7 @@ class Bin:
         isLikelyChimeric,
         fileName="",
         ignoreContigLengths=False,
+        extents=None,
         ET=None):
         """Plot a single bin"""
         fig = plt.figure()
@@ -491,6 +492,7 @@ class Bin:
             isLikelyChimeric,
             fileName=fileName,
             ignoreContigLengths=ignoreContigLengths,
+            extents=extents,
             ET=ET)
 
         plt.title(title)
@@ -582,7 +584,7 @@ class Bin:
         self.makeLimits()
 
         # reshape
-        disp_vals = np.reshape(disp_vals, (num_points, 3))
+        disp_vals = np.reshape(disp_vals, (num_points, 4))[:,:3]
 
         if ignoreContigLengths:
             sc = ax.scatter(disp_vals[:,0], disp_vals[:,1], disp_vals[:,2], edgecolors='none', c=contigGCs[self.rowIndices], cmap=colorMapGC, vmin=0.0, vmax=1.0, s=10, marker='.')

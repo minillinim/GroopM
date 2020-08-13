@@ -157,11 +157,9 @@ class ProfileManager:
                 self.kmerSigs = self.dataManager.getKmerSigs(self.dbFileName, indices=self.indices)
 
             if loadKmerSVDs:
-                self.kmerSVDs = self.dataManager.getKmerSVDs(self.dbFileName, indices=self.indices)
-
                 if(verbose):
-                    print("    Loading SVD kmer sigs (" + str(len(self.kmerSVDs[0])) + " dimensional space)")
-
+                    print("    Loading SVD kmer sigs")
+                self.kmerSVDs = self.dataManager.getKmerSVDs(self.dbFileName, indices=self.indices)
                 self.kmerNormSVD1 = np.copy(self.kmerSVDs[:,0])
                 self.kmerNormSVD1 -= self.kmerNormSVD1.min()
                 self.kmerNormSVD1 /= self.kmerNormSVD1.max()

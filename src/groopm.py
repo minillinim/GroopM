@@ -36,6 +36,7 @@ __status__ = "Released"
 ###############################################################################
 
 import matplotlib as mpl
+import sys
 
 # GroopM imports
 from . import mstore
@@ -119,6 +120,30 @@ class GroopMOptionsParser():
             print(" [[GroopM %s]] Running in core creation mode..." % self.GMVersion)
             print("*******************************************************************************")
 
+            pm = ProfileManager(options.dbname)
+            pm.loadData(
+                timer,
+                "(length >= 0) ",
+                loadRawKmers=False,
+                makeColors=True,
+                loadContigLengths=True,
+                loadContigNames=False,
+                loadContigGCs=True)
+
+            print("    %s" % timer.getTimeStamp())
+            sys.stdout.flush()
+
+            BM = binManager.BinManager(pm=pm)
+            BM.setColorMap('HSV')
+
+            AXC = ParaAxes(pm)
+            AXC.density_cluster(
+                BM,
+                window=options.window_size,
+                tolerance=options.tolerance,
+                plot_bins=options.plot_bins,
+                plot_journey=options.plot_journey,
+                limit=options.limit)
 
         elif(options.subparser_name == 'refine'):
             # refine bin cores
@@ -248,27 +273,34 @@ class GroopMOptionsParser():
                 ignoreContigLengths=options.points,
                 folder=options.folder)
 
+        elif(options.subparser_name == 'pplot'):
+            # make bin cores
+            print("*******************************************************************************")
+            print(" [[GroopM %s]] Running in parallel plotting mode..." % (self.GMVersion))
+            print("*******************************************************************************")
+
+            pm = ProfileManager(options.dbname)
+            pm.loadData(
+                timer,
+                "(length >= %d) " % options.cutoff,
+                loadRawKmers=False,
+                makeColors=False,
+                loadContigNames=False,
+                loadContigGCs=False)
+
+            print("    %s" % timer.getTimeStamp())
+            sys.stdout.flush()
+
+            AXC = ParaAxes(pm)
+            AXC.plot(
+                num_blocks=options.blocks,
+                include=options.include_ratio)
+
         elif(options.subparser_name == 'explore'):
             # make bin cores
             print("*******************************************************************************")
             print(" [[GroopM %s]] Running in '%s' explorer mode..." % (self.GMVersion, options.mode))
             print("*******************************************************************************")
-
-            if (options.mode == 'parallel'):
-                pm = ProfileManager(options.dbname)
-                pm.loadData(
-                    timer,
-                    "(length >= %d) " % options.cutoff,
-                    loadRawKmers=False,
-                    makeColors=False,
-                    loadContigNames=False,
-                    loadContigGCs=False,
-                    verbose=False,
-                    silent=True)
-
-                AXC = ParaAxes(pm)
-                AXC.plot()
-                return
 
             bids = []
             if options.bids is not None:

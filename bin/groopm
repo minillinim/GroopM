@@ -148,13 +148,12 @@ if __name__ == '__main__':
                                         help='load saved data and make bin cores',
                                         description='Load saved data and make bin cores')
     core_builder.add_argument('dbname', help="name of the database to open")
-    core_builder.add_argument('-c', '--cutoff', type=int, default=1500, help="cutoff contig size for core creation")
-    core_builder.add_argument('-s', '--size', type=int, default=10, help="minimum number of contigs which define a core")
-    core_builder.add_argument('-b', '--bp', type=int, default=1000000, help="cumulative size of contigs which define a core regardless of number of contigs")
-    core_builder.add_argument('-f', '--force', action="store_true", default=False, help="overwrite existing DB file without prompting")
-    core_builder.add_argument('-g', '--graphfile', help="output graph of micro bin mergers")
-    core_builder.add_argument('-p', '--plot', action="store_true", default=False, help="create plots of bins after basic refinement")
-    core_builder.add_argument('-m', '--multiplot', default=0, help="create plots during core creation - (0-3) MAKES MANY IMAGES!")
+    core_builder.add_argument('-w', '--window_size', type=int, default=3000, help='Build models using a sliding window of this many ranked rows')
+    core_builder.add_argument('-t', '--tolerance', type=float, default=0.035, help='Specify how far we travel from the centroid by default')
+    core_builder.add_argument('-b', '--plot_bins', action="store_true", default=False, help="create plots of bins after basic refinement")
+    core_builder.add_argument('-j', '--plot_journey', action='store_true', default=False, help="create plots during core creation - MAKES MANY IMAGES!")
+    core_builder.add_argument('-l', '--limit', type=int, default=0, help='Only build this many bins 0 for build as many as possible')
+    # core_builder.add_argument('-s', '--size', type=int, default=10, help="minimum number of contigs which define a core")
 
     #-------------------------------------------------
     # refine bins
@@ -258,6 +257,16 @@ if __name__ == '__main__':
     ##################################################
     # Plotting
     ##################################################
+
+    #-------------------------------------------------
+    # show parallel plots
+    pplotter = subparsers.add_parser('pplot',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        help='explore and validate bins')
+    pplotter.add_argument('dbname', help="name of the database to open")
+    pplotter.add_argument('-i', '--include_ratio', type=float, default=1.0, help="include only the top X percent of ranked contigs")
+    pplotter.add_argument('-b', '--blocks', type=int, default=1, help="break contigs into X blocks and plot as added")
+    pplotter.add_argument('-c', '--cutoff', type=int, default=1000, help="cutoff contig size")
 
     #-------------------------------------------------
     # visualise all bins

@@ -41,22 +41,45 @@ import matplotlib.pyplot as plt
 from sklearn import preprocessing
 from sklearn.decomposition import TruncatedSVD
 
+from .densityTools import DensityKernel, DensityStore, DensityGraph
+
 ###############################################################################
+
+class TmpBin(object):
+
+    def __init__(self, num_columns):
+        self.lower_bounds = [0. for _ in range(num_columns)]
+        self.upper_bounds = [0. for _ in range(num_columns)]
+
+    def add_bound(self, column, lower, upper):
+        self.lower_bounds[column] = lower
+        self.upper_bounds[column] = upper
+
+    def init_idxs(self, idxs):
+        self.idxs = list(idxs)
+
+    def add_idx(self, idx, row):
+        for column, value in enumerate(row):
+            if value < self.lower_bounds[column] or value > self.upper_bounds[column]:
+                return False
+        self.idxs.append(idx)
+        return True
 
 class ParaAxes(object):
 
     def __init__(self, profile_manager, resolution=1000):
-        self.axes = None
-        self.kernel_stamp = None
-        self.kernel_type = None
         self.pm = profile_manager
         self.resolution = resolution
-        self.step = 1. / self.resolution
-        self.norm_coverages = np.linalg.norm(self.pm.transformedCP, axis=1)
-        self.num_contigs = len(self.norm_coverages)
+        self.kernel = DensityKernel(self.resolution)
+        self.axes = None
+        self.axes_sorter = []
+        self.num_contigs = len(self.pm.normCoverages)
         self.num_columns = 6
+        self.ranked_idxs = np.argsort(self.pm.normCoverages)[::-1]
+        self.tmp_bins = []
 
-    def _make_axes(self, force=False):
+    def make_axes(self, force=False):
+        print("    Making parallel axes")
 
         if self.axes is not None:
             if not force:
@@ -76,121 +99,245 @@ class ParaAxes(object):
             min_max_scaler.fit_transform(self.axes),
             columns=self.axes.columns)
 
-    def init_density_storage(self, kernel_type='linear', plot=False):
-        self._make_axes()
-        self._make_kernels(kernel_type)
-        self.ranked_idxs = self._rank_contigs()
-        self.density = np.zeros((self.resolution, len(self.axes.columns)))
+    def density_cluster(self,
+        bin_manager,
+        window=2000,
+        tolerance=0.025,
+        plot_bins=False,
+        plot_journey=False,
+        limit=0):
 
-    def init_density_grap_storage(self, kernel_type='linear', step_between=200):
-        self._make_axes()
-        self._make_kernels(kernel_type)
-        self.ranked_idxs = self._rank_contigs()
-        self.density_graph = np.zeros(
-            (self.resolution, step_between * (len(self.axes.columns) - 1)))
-        back_mult = np.array(list(range(step_between))[::-1])/(step_between - 1.)
-        forward_mult = np.array(list(range(step_between)))/(step_between - 1.)
-        self.d_graph_data = [step_between, back_mult, forward_mult]
+        bin = bin_manager.makeNewBin(rowIndices=self.ranked_idxs[:window])
+        bin_manager.plotBins(bids=[bin.id])
 
-    def _make_kernels(self, kernel_type, span_ratio=.075):
-        '''span_ratio determines what percentage of windows are covered by the kernel'''
+        self.make_axes()
 
-        self.kernel_type = kernel_type
+        rows_assigned = 0
 
-        if self.kernel_type == 'linear':
+        density_store = DensityStore(
+            self.num_columns,
+            self.kernel,
+            plot_journey=plot_journey)
 
-            span = int(self.resolution * span_ratio)
-            if span % 2 == 0:
-                span -= 1
-            assert(span > 2)
-            half_span = int((span - 1) / 2)
-            step = 1. / (half_span + 1)
+        print('Start PAX density clustering')
+        left_boundary = window
+        used_idxs = set()
+        target_idxs = self.ranked_idxs[:window]
+        print('    Making first density block using a window of %s ranked rows (Total: %s)' %  (
+            window,
+            self.num_contigs))
 
-            self.kernel_stamp = np.pad(
-                np.pad(
-                    [1.],
-                    (half_span, half_span),
-                    'linear_ramp',
-                    end_values=(step, step)),
-                (self.resolution-half_span-1, self.resolution-half_span-1),
-                'constant',
-                constant_values=(0.))
+        for row in self.axes.values[self.ranked_idxs[:window], :]:
+            density_store.add(row)
 
-    def _rank_contigs(self, force=False):
-        rankings = dict(zip(np.argsort(self.norm_coverages), range(len(self.norm_coverages))))
-        for rank_idx, pm_idx in enumerate(np.argsort(self.pm.contigLengths)):
-            rankings[pm_idx] += rank_idx
-        return [k for k, v in sorted(rankings.items(), key=lambda item: item[1])][::-1]
+        count = 0
+        if limit == 0:
+            from sys import maxsize
+            limit = maxsize
+        keep_going = True
+        while(keep_going):
+            count += 1
 
-    def density_cluster(self, include=1.0):
-        self.init_density_storage()
-        for _, row in self.axes[:int(include*self.num_contigs)].iterrows():
-            _update_density(row)
+            print('      Pass: %s - %s rows assigned (%0.2f pct)' % (
+                count,
+                rows_assigned,
+                100. * (rows_assigned / self.num_contigs)))
 
-    def _update_density(self, row):
-        for idx, value in enumerate(row):
-            self.density[:, idx] += self._get_kernel(value)
+            if count > limit:
+                keep_going = False
 
-    def _update_density_graph(self, row):
-        last_val = 0
-        step_between, back_mult, forward_mult = self.d_graph_data
-        for idx, value in enumerate(row):
-            if idx > 0:
-                start_step_idx = step_between * (idx-1)
-                for mult_idx, dg_idx in enumerate(
-                    range(
-                        start_step_idx,
-                        start_step_idx + step_between)):
+            if plot_journey:
+                fig = plt.figure()
+                density_store.plot(fig.add_subplot(self.num_columns + 1, 2, 1))
+                current_plot = 2
 
-                    self.density_graph[:,dg_idx] += self._get_kernel(
-                        value * forward_mult[mult_idx] +
-                        last_val * back_mult[mult_idx])
+            _density_store = density_store
+            _target_idxs = target_idxs
+            used_columns = []
 
-            last_val = value
+            tmp_bin = TmpBin(self.num_columns)
 
-    def _get_kernel(self, value):
-        ki = max(0, self.resolution - int((1. - value) / self.step) -1)
-        return self.kernel_stamp[ki:ki+self.resolution]
+            bin_boundary = { col: None for col in range(self.num_columns) }
 
-    def plot(self, num_blocks=20):
+            for round in range(self.num_columns):
+                print('        Round: %s - working with: %s rows' % (round, len(_target_idxs)))
+                if len(_target_idxs) == 0:
+                    keep_going = False
+                    break
 
-        self.init_density_grap_storage()
+                # locate the brightest part of the density graph
+                (brightest_column, brightest_value, target_value) = _density_store.find_brightest(used_columns)
+                used_columns.append(brightest_column)
 
-        block_step = int(self.num_contigs / num_blocks)
+                lower_bound = np.max([0, target_value-tolerance])
+                upper_bound = np.min([1, target_value+tolerance])
+                tmp_bin.add_bound(brightest_column, lower_bound, upper_bound)
+
+                print(
+                    '            col | val | lb | tgt | ub:',
+                    brightest_column,
+                    '%0.3f' % brightest_value,
+                    '%0.3f' % lower_bound,
+                    '%0.3f' % target_value,
+                    '%0.3f' % upper_bound)
+
+                sorted_idxs = np.argsort(self.axes.values[_target_idxs, brightest_column])
+                included_idx = np.searchsorted(
+                    self.axes.values[_target_idxs, brightest_column],
+                    lower_bound,
+                    'left',
+                    sorted_idxs)
+
+                __target_idxs = []
+                _density_store = DensityStore(
+                    self.num_columns,
+                    self.kernel,
+                    plot_journey=plot_journey)
+
+                print('            len sorted: %s' % len(sorted_idxs))
+                print('            Start from: %s' % (included_idx))
+
+                if plot_journey:
+                    line_ax = fig.add_subplot(self.num_columns + 1, 2, current_plot)
+                    current_plot += 1
+                    Xs = range(self.num_columns)
+
+                for idx in _target_idxs[sorted_idxs[included_idx:]]:
+                    row = self.axes.values[idx, :]
+                    # print(idx, row)
+                    if row[brightest_column] >= upper_bound: break
+                    __target_idxs.append(idx)
+                    _density_store.add(row)
+                    if plot_journey:
+                        line_ax.plot(Xs, row, 'k')
+
+                _target_idxs = np.array(__target_idxs)
+
+                print('            Added %s | %s rows to ds' % (len(_target_idxs), _density_store.num_rows))
+
+                if plot_journey:
+                    _density_store.plot(fig.add_subplot(self.num_columns + 1, 2, current_plot))
+                    current_plot += 1
+
+            tmp_bin.init_idxs(_target_idxs)
+            self.tmp_bins.append(tmp_bin)
+
+            if plot_journey:
+                print('        Plotting journey #%s' % count)
+                plt.savefig('journey-%s-%s.png' % (count, len(_target_idxs)), dpi=300, format='png')
+                plt.close(fig)
+                del fig
+
+            print('        Update targets')
+
+            if len(_target_idxs) == 0:
+                break
+
+            rows_assigned += len(_target_idxs)
+
+            for row in self.axes.values[_target_idxs, :]:
+                density_store.remove(row)
+
+            target_idxs = list(set(target_idxs) - set(_target_idxs))
+
+            if left_boundary < self.num_contigs:
+                while(len(target_idxs) < window):
+                    try:
+                        _idx = self.ranked_idxs[left_boundary]
+                        left_boundary += 1
+                        row = self.axes.values[_idx]
+                        add = True
+                        # Test if the new row can be added to existing...
+                        for tmp_bin in self.tmp_bins:
+                            if tmp_bin.add_idx(_idx, row):
+                                add = False
+                                rows_assigned += 1
+                                break
+                        if add:
+                            target_idxs.append(_idx)
+                            density_store.add(row)
+
+                    except IndexError: break
+
+            target_idxs = np.array(target_idxs)
+
+        print('    DONE. %s rows of %s assigned (%0.2f pct)' % (
+            rows_assigned,
+            self.num_contigs,
+            100. * (rows_assigned / self.num_contigs)))
+
+        if plot_bins:
+            for tmp_bin in self.tmp_bins:
+                bin_manager.makeNewBin(rowIndices=np.array(tmp_bin.idxs))
+            bin_manager.plotBins()
+
+        import code
+        code.interact(local=locals())
+
+    def plot(self, num_blocks=1, include=1.0):
+
+        self.make_axes()
+
+        print('Start PAX density plotting')
+        density_graph = DensityGraph(self.num_columns, self.kernel)
+        include_up_to = int(include*self.num_contigs)
+        target_idxs = self.ranked_idxs[:include_up_to]
+
+        print('    Making density plots using %s percent of the rows (%s)' %  (
+            int(include*100),
+            include_up_to))
+
+        block_step = int(include_up_to / num_blocks)
         block_boundaries = [i * block_step for i in range(num_blocks)]
-        block_boundaries.append(self.num_contigs)
-        Xs = range(len(self.axes.columns))
+        block_boundaries.append(include_up_to)
+
         for block_idx in range(num_blocks):
+            self.plot_single(
+                target_idxs[block_boundaries[block_idx]:block_boundaries[block_idx+1]],
+                block_idx+1,
+                black_line_idxs=target_idxs[:block_boundaries[block_idx]],
+                density_graph=density_graph)
 
-            fig = plt.figure()
-            dens_ax = fig.add_subplot(2, 1, 1)
-            line_ax = fig.add_subplot(2, 1, 2)
+    def plot_single(self,
+        target_idxs,
+        block_id,
+        black_line_idxs=[],
+        density_graph=None):
 
-            for _, row in self.axes[:block_boundaries[block_idx]].iterrows():
+        if density_graph is None:
+            density_graph = DensityGraph(self.num_columns, self.kernel)
+
+        fig = plt.figure()
+        line_ax = fig.add_subplot(2, 1, 2)
+        Xs = range(self.num_columns)
+
+        if len(black_line_idxs) > 0:
+            print('    plotting black lines for block: %s' % (block_id))
+            for row in self.axes.values[black_line_idxs]:
                 line_ax.plot(Xs, row, 'k')
 
-            line_ax.set_xticklabels(['C1', 'C2', 'C3', 'C4', 'K1', 'K2'])
-            line_ax.set_yticklabels([])
-            line_ax.set_yticks([])
+        print('    plotting red + dens for block: %s' % (block_id))
+        count = 0
+        for idx, row in enumerate(self.axes.values[target_idxs]):
+            line_ax.plot(Xs, row, 'r')
+            density_graph.add(row)
+            count += 1
+            if count >= 1000:
+                print('  -- PPLOT Processed %s rows' % (idx + 1))
+                count = 0
 
-            for _, row in self.axes[block_boundaries[block_idx]:block_boundaries[block_idx+1]].iterrows():
-                line_ax.plot(Xs, row, 'r')
-                self._update_density_graph(row)
+        density_graph.plot_max_line(density_graph.plot(fig.add_subplot(2, 1, 1)))
 
-            dens_ax.imshow(
-                np.sqrt(self.density_graph),
-                interpolation='nearest',
-                extent=(-0.5, (self.num_columns*1000)-0.5, -0.5, 3000-0.5))
+        plt.axis('off')
+        plt.savefig('/tmp/%s.png' % block_id, dpi=300, format='png')
+        plt.close(fig)
+        del fig
 
-            plt.axis('off')
-            plt.savefig('/tmp/%s.png' % block_idx, dpi=300, format='png')
-            plt.close(fig)
-            del fig
+    def plot_lines(self, ax, data=None):
+        if data is None:
+            if self.axes is None: return
+            data = self.axes.values
 
-    def plot_lines(self, ax, lower_coverage_bound=10):
-        if self.axes is None: return
-
-        Xs = range(len(self.axes.columns))
-        for idx, row in self.axes.iterrows():
-            if self.norm_coverages[idx] < lower_coverage_bound: continue
+        Xs = range(self.num_columns)
+        for row in data:
             ax.plot(Xs, row, 'k')

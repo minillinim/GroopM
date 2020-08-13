@@ -1328,6 +1328,7 @@ class BinManager:
 
     def plotBins(
         self,
+        bids=None,
         FNPrefix="BIN",
         sideBySide=False,
         folder='',
@@ -1341,15 +1342,18 @@ class BinManager:
         if folder != '':
             makeSurePathExists(folder)
 
-        for bid in self.getBids():
+        if bids is None:
+            bids = self.getBids()
+
+        for bid in bids:
             self.bins[bid].makeBinDist(self.PM.transformedCP, self.PM.averageCoverages, self.PM.kmerNormSVD1, self.PM.kmerSVDs, self.PM.contigGCs, self.PM.contigLengths)
 
         if(sideBySide):
             print("Plotting side by side")
-            self.plotSideBySide(list(self.bins.keys()), tag=FNPrefix, ignoreContigLengths=ignoreContigLengths)
+            self.plotSideBySide(bids, tag=FNPrefix, ignoreContigLengths=ignoreContigLengths)
         else:
             print("Plotting bins")
-            for bid in self.getBids():
+            for bid in bids:
                 if folder == '':
                     file_name = FNPrefix+"_"+str(bid)
                 else:
@@ -1364,6 +1368,7 @@ class BinManager:
                     self.PM.isLikelyChimeric,
                     fileName=file_name,
                     ignoreContigLengths=ignoreContigLengths,
+                    extents=[0,1,0,1,0,1],
                     ET=ET)
 
     def plotBinCoverage(self, plotEllipses=False, plotContigLengs=False, printID=False):
