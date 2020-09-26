@@ -1,4 +1,4 @@
-FROM bamm:latest
+FROM minillinim/bamm:latest
 
 RUN \
      python3 -m pip install --upgrade pip \
