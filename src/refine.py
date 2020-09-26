@@ -94,7 +94,6 @@ class RefineEngine:
                  timer,
                  BM=None,
                  dbFileName="",
-                 transform=True,
                  getUnbinned=False,
                  loadContigNames=False,
                  cutOff=0,
@@ -110,8 +109,7 @@ class RefineEngine:
                              silent=False,
                              cutOff=cutOff,
                              loadContigNames=loadContigNames,
-                             getUnbinned=getUnbinned,
-                             transform=transform)
+                             getUnbinned=getUnbinned)
         else:
             self.BM = BM
 
@@ -123,17 +121,12 @@ class RefineEngine:
         # pay attention to contig lengths when including in bins use grubbs test
         self.GT = GrubbsTester()
 
-        self.transform = transform        # are we going to transform the data
-
 #------------------------------------------------------------------------------
 # REFINING
 
     def refineBins(self, timer, auto=False, saveBins=False, plotFinal="", gf=""):
         """Iterative wrapper for the refine function"""
-        if self.transform:      # do we want to plot to 1000*1000*1000
-            ignoreRanges=False
-        else:
-            ignoreRanges=True
+        ignoreRanges=False
 
         if auto:
             print("    Start automatic bin refinement")

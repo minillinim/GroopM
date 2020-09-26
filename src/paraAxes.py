@@ -41,7 +41,11 @@ import matplotlib.pyplot as plt
 from sklearn import preprocessing
 from sklearn.decomposition import TruncatedSVD
 
+import logging
+L = logging.getLogger('groopm')
+
 from .densityTools import DensityKernel, DensityStore, DensityGraph
+from . import binManager
 
 ###############################################################################
 
@@ -78,8 +82,13 @@ class ParaAxes(object):
         self.ranked_idxs = np.argsort(self.pm.normCoverages)[::-1]
         self.tmp_bins = []
 
+    def L(self, indent_level, message):
+        L.info('%s%s' % (
+            ''.join([' ']*(indent_level*2)),
+            message))
+
     def make_axes(self, force=False):
-        print("    Making parallel axes")
+        self.L(0, "Making parallel axes")
 
         if self.axes is not None:
             if not force:
@@ -101,16 +110,20 @@ class ParaAxes(object):
 
     def density_cluster(self,
         bin_manager,
+        save_bins=True,
         window=2000,
         tolerance=0.025,
         plot_bins=False,
         plot_journey=False,
         limit=0):
 
-        bin = bin_manager.makeNewBin(rowIndices=self.ranked_idxs[:window])
-        bin_manager.plotBins(bids=[bin.id])
-
         self.make_axes()
+
+        # BM = binManager.BinManager(pm=self.pm)
+        # BM.setColorMap('HSV')
+        # all_bin = BM.makeNewBin(rowIndices=self.ranked_idxs)
+        # BM.plotBins(bids=[all_bin.id], axes=self.axes.values, FNPrefix='ALLBIN')
+        # return
 
         rows_assigned = 0
 
@@ -119,11 +132,11 @@ class ParaAxes(object):
             self.kernel,
             plot_journey=plot_journey)
 
-        print('Start PAX density clustering')
+        self.L(0, 'Start PAX density clustering')
         left_boundary = window
         used_idxs = set()
         target_idxs = self.ranked_idxs[:window]
-        print('    Making first density block using a window of %s ranked rows (Total: %s)' %  (
+        self.L(1, 'Making first density block using a window of %s ranked rows (Total: %s)' %  (
             window,
             self.num_contigs))
 
@@ -138,7 +151,7 @@ class ParaAxes(object):
         while(keep_going):
             count += 1
 
-            print('      Pass: %s - %s rows assigned (%0.2f pct)' % (
+            self.L(2, 'Pass: %s - %s rows assigned (%0.2f pct)' % (
                 count,
                 rows_assigned,
                 100. * (rows_assigned / self.num_contigs)))
@@ -154,13 +167,10 @@ class ParaAxes(object):
             _density_store = density_store
             _target_idxs = target_idxs
             used_columns = []
-
             tmp_bin = TmpBin(self.num_columns)
 
-            bin_boundary = { col: None for col in range(self.num_columns) }
-
             for round in range(self.num_columns):
-                print('        Round: %s - working with: %s rows' % (round, len(_target_idxs)))
+                self.L(3, 'Round: %s - working with: %s rows' % (round, len(_target_idxs)))
                 if len(_target_idxs) == 0:
                     keep_going = False
                     break
@@ -173,13 +183,14 @@ class ParaAxes(object):
                 upper_bound = np.min([1, target_value+tolerance])
                 tmp_bin.add_bound(brightest_column, lower_bound, upper_bound)
 
-                print(
-                    '            col | val | lb | tgt | ub:',
-                    brightest_column,
-                    '%0.3f' % brightest_value,
-                    '%0.3f' % lower_bound,
-                    '%0.3f' % target_value,
-                    '%0.3f' % upper_bound)
+                self.L(
+                    4,
+                    'col: %s | val: %s | lb: %s | tgt: %s | ub: %s' % (
+                        brightest_column,
+                        '%0.3f' % brightest_value,
+                        '%0.3f' % lower_bound,
+                        '%0.3f' % target_value,
+                        '%0.3f' % upper_bound))
 
                 sorted_idxs = np.argsort(self.axes.values[_target_idxs, brightest_column])
                 included_idx = np.searchsorted(
@@ -194,8 +205,8 @@ class ParaAxes(object):
                     self.kernel,
                     plot_journey=plot_journey)
 
-                print('            len sorted: %s' % len(sorted_idxs))
-                print('            Start from: %s' % (included_idx))
+                self.L(4, 'len sorted: %s' % len(sorted_idxs))
+                self.L(4, 'Start from: %s' % (included_idx))
 
                 if plot_journey:
                     line_ax = fig.add_subplot(self.num_columns + 1, 2, current_plot)
@@ -204,7 +215,6 @@ class ParaAxes(object):
 
                 for idx in _target_idxs[sorted_idxs[included_idx:]]:
                     row = self.axes.values[idx, :]
-                    # print(idx, row)
                     if row[brightest_column] >= upper_bound: break
                     __target_idxs.append(idx)
                     _density_store.add(row)
@@ -213,7 +223,7 @@ class ParaAxes(object):
 
                 _target_idxs = np.array(__target_idxs)
 
-                print('            Added %s | %s rows to ds' % (len(_target_idxs), _density_store.num_rows))
+                self.L(4, 'Added %s | %s rows to ds' % (len(_target_idxs), _density_store.num_rows))
 
                 if plot_journey:
                     _density_store.plot(fig.add_subplot(self.num_columns + 1, 2, current_plot))
@@ -223,12 +233,12 @@ class ParaAxes(object):
             self.tmp_bins.append(tmp_bin)
 
             if plot_journey:
-                print('        Plotting journey #%s' % count)
+                self.L(3, 'Plotting journey #%s' % count)
                 plt.savefig('journey-%s-%s.png' % (count, len(_target_idxs)), dpi=300, format='png')
                 plt.close(fig)
                 del fig
 
-            print('        Update targets')
+            self.L(3, 'Update targets')
 
             if len(_target_idxs) == 0:
                 break
@@ -261,29 +271,36 @@ class ParaAxes(object):
 
             target_idxs = np.array(target_idxs)
 
-        print('    DONE. %s rows of %s assigned (%0.2f pct)' % (
+        self.L(2, 'DONE. %s rows of %s assigned (%0.2f pct)' % (
             rows_assigned,
             self.num_contigs,
             100. * (rows_assigned / self.num_contigs)))
 
-        if plot_bins:
-            for tmp_bin in self.tmp_bins:
-                bin_manager.makeNewBin(rowIndices=np.array(tmp_bin.idxs))
-            bin_manager.plotBins()
+        for tmp_bin in self.tmp_bins:
+            bin = bin_manager.makeNewBin(rowIndices=np.array(tmp_bin.idxs))
+            with open('BINDATA_%s' % (bin.id), 'w') as fh:
+                for ridx in tmp_bin.idxs:
+                    fh.write('%s\n' % (str(self.axes.values[ridx])))
 
-        import code
-        code.interact(local=locals())
+        if plot_bins:
+            bin_manager.plotBins(axes=self.axes.values)
+
+        if save_bins:
+            bin_manager.saveBins(nuke=True)
+
+        # import code
+        # code.interact(local=locals())
 
     def plot(self, num_blocks=1, include=1.0):
 
         self.make_axes()
 
-        print('Start PAX density plotting')
+        self.L(0, 'Start PAX density plotting')
         density_graph = DensityGraph(self.num_columns, self.kernel)
         include_up_to = int(include*self.num_contigs)
         target_idxs = self.ranked_idxs[:include_up_to]
 
-        print('    Making density plots using %s percent of the rows (%s)' %  (
+        self.L(0, 'Making density plots using %s percent of the rows (%s)' %  (
             int(include*100),
             include_up_to))
 
@@ -312,18 +329,18 @@ class ParaAxes(object):
         Xs = range(self.num_columns)
 
         if len(black_line_idxs) > 0:
-            print('    plotting black lines for block: %s' % (block_id))
+            self.L(1, 'plotting black lines for block: %s' % (block_id))
             for row in self.axes.values[black_line_idxs]:
                 line_ax.plot(Xs, row, 'k')
 
-        print('    plotting red + dens for block: %s' % (block_id))
+        self.L(1, 'plotting red + dens for block: %s' % (block_id))
         count = 0
         for idx, row in enumerate(self.axes.values[target_idxs]):
             line_ax.plot(Xs, row, 'r')
             density_graph.add(row)
             count += 1
             if count >= 1000:
-                print('  -- PPLOT Processed %s rows' % (idx + 1))
+                self.L(2, 'PPLOT Processed %s rows' % (idx + 1))
                 count = 0
 
         density_graph.plot_max_line(density_graph.plot(fig.add_subplot(2, 1, 1)))

@@ -34,20 +34,15 @@ __email__ = "michael.imelfort@gmail.com"
 ###############################################################################
 
 import sys
-
 import matplotlib.pyplot as plt
-
 import numpy as np
-from numpy import (around as np_around,
-                   array as np_array,
-                   mean as np_mean,
-                   median as np_median,
-                   std as np_std)
+np.seterr(all='raise')
 
 from .ellipsoid import EllipsoidTool
 from .groopmExceptions import ModeNotAppropriateException
 
-np.seterr(all='raise')
+import logging
+L = logging.getLogger('groopm')
 
 ###############################################################################
 ###############################################################################
@@ -66,7 +61,7 @@ def mungeCbar(cbar):
     except AttributeError:
         # matplotlib 1.4.x
         tmp_xy = cbar.outline.get_xy()
-        tmp_xy[:,1] = np_array(([0.15] * 2 + [0.85] * 4 + [0.15] * 3))
+        tmp_xy[:,1] = np.array(([0.15] * 2 + [0.85] * 4 + [0.15] * 3))
         cbar.outline.set_xy(tmp_xy)
 
 ###############################################################################
@@ -137,11 +132,10 @@ class Bin:
 #------------------------------------------------------------------------------
 # Grow and shrink
 
-    def consume(self, transformedCP, averageCoverages, kmerNormSVD1, kmerPCs, contigGCs, contigLengths, deadBin, verbose=False):
+    def consume(self, transformedCP, averageCoverages, kmerNormSVD1, kmerPCs, contigGCs, contigLengths, deadBin):
         """Combine the contigs of another bin with this one"""
         # consume all the other bins rowIndices
-        if(verbose):
-            print("    BIN:",deadBin.id,"will be consumed by BIN:",self.id)
+        L.info('BIN: %s will be consumed by BIN: %s' % (deadBin.id, self.id))
         self.rowIndices = np.concatenate([self.rowIndices, deadBin.rowIndices])
         self.binSize  = self.rowIndices.shape[0]
 
@@ -153,7 +147,6 @@ class Bin:
 
         This is the norm of the vector containing z distances for both profiles
         """
-        #print(self.covStdevs, self.binSize)
         covZ = np.abs(np.mean(np.abs(transformedCP - self.covMedians)/self.covStdevs))
         merZ = np.abs(kmerVal - self.kValMeanNormPC1)/self.kValStdevNormPC1
         return (covZ,merZ)
@@ -197,7 +190,6 @@ class Bin:
 
         The distribution is largely normal, except at the boundaries.
         """
-        #print("MBD", self.id, self.binSize)
         self.binSize = self.rowIndices.shape[0]
         if(0 == np.size(self.rowIndices)):
             return
@@ -206,18 +198,18 @@ class Bin:
         (self.covMedians, self.covStdevs) = self.getCentroidStats(transformedCP)
         (self.lengthMean, self.lengthStd) = self.getCentroidStats(contigLengths)
 
-        self.kValMeanNormPC1 = np_median(kmerPCs[self.rowIndices])
-        self.kValStdevNormPC1 = np_std(kmerPCs[self.rowIndices])
+        self.kValMeanNormPC1 = np.median(kmerPCs[self.rowIndices])
+        self.kValStdevNormPC1 = np.std(kmerPCs[self.rowIndices])
 
-        self.kMedian = np_median(kmerPCs[self.rowIndices], axis=0)
-        self.kStdevs = np_std(kmerPCs[self.rowIndices], axis=0)
+        self.kMedian = np.median(kmerPCs[self.rowIndices], axis=0)
+        self.kStdevs = np.std(kmerPCs[self.rowIndices], axis=0)
 
         cvals = self.getAverageCoverageDist(averageCoverages)
-        self.cValMedian = np_around(np_median(cvals), decimals=3)
-        self.cValStdev = np_around(np_std(cvals), decimals=3)
+        self.cValMedian = np.around(np.median(cvals), decimals=3)
+        self.cValStdev = np.around(np.std(cvals), decimals=3)
 
-        self.gcMedian = np_median(contigGCs[self.rowIndices])
-        self.gcStdev = np_std(contigGCs[self.rowIndices])
+        self.gcMedian = np.median(contigGCs[self.rowIndices])
+        self.gcStdev = np.std(contigGCs[self.rowIndices])
 
         # work out the total size
         self.totalBP = sum([contigLengths[i] for i in self.rowIndices])
@@ -254,13 +246,13 @@ class Bin:
 
         # return the mean and stdev
         # we divide by std so we need to make sure it's never 0
-        tmp_stds = np_std(working_list, axis=0)
-        mean_std = np_mean(tmp_stds)
+        tmp_stds = np.std(working_list, axis=0)
+        mean_std = np.mean(tmp_stds)
         try:
-            std = np_array([x if x != 0 else mean_std for x in tmp_stds])
+            std = np.array([x if x != 0 else mean_std for x in tmp_stds])
         except:
             std = mean_std
-        return (np_median(working_list,axis=0), std)
+        return (np.median(working_list,axis=0), std)
 
     def getkmerValDist(self, kmerNormSVD1):
         """Return an array of kmer vals for this bin"""
@@ -312,7 +304,7 @@ class Bin:
             try:
                 return ET.getMinVolEllipse(bin_points, retA=retA)
             except:
-                print(bin_points)
+                L.error(str(bin_points))
                 raise
         else: # minimum bounding ellipse of a point is 0
             if retA:
@@ -460,14 +452,15 @@ class Bin:
                 fig.set_size_inches(10,4)
                 plt.savefig(fileName,dpi=300)
             except:
-                print("Error saving image:", fileName, sys.exc_info()[0])
+                L.error("Error saving image: %s %s" % (fileName, sys.exc_info()[0]))
                 raise
         else:
             try:
                 plt.show()
             except:
-                print("Error showing image:", sys.exc_info()[0])
+                L.error("Error showing image: %s" % (sys.exc_info()[0]))
                 raise
+        plt.close(fig)
         del fig
 
     def plotBin(self,
@@ -480,11 +473,18 @@ class Bin:
         fileName="",
         ignoreContigLengths=False,
         extents=None,
-        ET=None):
+        ET=None,
+        axes=None):
         """Plot a single bin"""
         fig = plt.figure()
+
+        if axes is None:
+            num_rows = 1
+        else:
+            num_rows = 2
+
         title = self.plotOnFig(
-            fig, 1, 1, 1,
+            fig, num_rows, 1, 1,
             transformedCP,
             contigGCs,
             contigLengths,
@@ -496,18 +496,27 @@ class Bin:
             ET=ET)
 
         plt.title(title)
+
+        if axes is not None:
+            line_ax = fig.add_subplot(2, 1, 2)
+            Xs = range(np.shape(axes)[1])
+            for row in axes[self.rowIndices]:
+                line_ax.plot(Xs, row, 'k')
+
+        plt.tight_layout()
+
         if(fileName != ""):
             try:
                 fig.set_size_inches(6,6)
                 plt.savefig(fileName+".png",dpi=300)
             except:
-                print("Error saving image:", fileName, sys.exc_info()[0])
+                L.error("Error saving image: %s %s" % (fileName, sys.exc_info()[0]))
                 raise
         else:
             try:
                 plt.show()
             except:
-                print("Error showing image:", sys.exc_info()[0])
+                L.error("Error showing image: %s" % (sys.exc_info()[0]))
                 raise
         plt.close(fig)
         del fig
@@ -574,11 +583,8 @@ class Bin:
             self.makeLimits()
             px = self.covMedians[0]
             py = self.covMedians[1]
-            #pz = self.covMedians[2]
-            #num_points += 1
-            #disp_vals = np.append(disp_vals, [px,py,pz])
-            #disp_lens = np.append(disp_lens, 100)
-            cc_string = "Coverage centroid: %d %d [%d -> %d]\n" % (px,py,self.covLowerLimits[2],self.covUpperLimits[2])
+            pz = self.covMedians[2]
+            cc_string = "Coverage centroid: %0.3f %0.3f %0.3f\n" % (px, py, pz)
 
         # fix these
         self.makeLimits()
@@ -586,15 +592,19 @@ class Bin:
         # reshape
         disp_vals = np.reshape(disp_vals, (num_points, 4))[:,:3]
 
-        if ignoreContigLengths:
-            sc = ax.scatter(disp_vals[:,0], disp_vals[:,1], disp_vals[:,2], edgecolors='none', c=contigGCs[self.rowIndices], cmap=colorMapGC, vmin=0.0, vmax=1.0, s=10, marker='.')
-        else:
-            sc = ax.scatter(disp_vals[:,0], disp_vals[:,1], disp_vals[:,2], edgecolors='k', c=contigGCs[self.rowIndices], cmap=colorMapGC, vmin=0.0, vmax=1.0, s=disp_lens, marker='.')
+        try:
+            if ignoreContigLengths:
+                sc = ax.scatter(disp_vals[:,0], disp_vals[:,1], disp_vals[:,2], edgecolors='none', c=contigGCs[self.rowIndices], cmap=colorMapGC, vmin=0.0, vmax=1.0, s=10, marker='.')
+            else:
+                sc = ax.scatter(disp_vals[:,0], disp_vals[:,1], disp_vals[:,2], edgecolors='k', c=contigGCs[self.rowIndices], cmap=colorMapGC, vmin=0.0, vmax=1.0, s=disp_lens, marker='.')
+        except IndexError:
+            L.error('disp_vals: %s contigGCs: %s num_rows: %s' % (np.shape(disp_vals), np.shape(contigGCs), len(self.rowIndices)))
+            raise
         sc.set_edgecolors = sc.set_facecolors = lambda *args:None # disable depth transparency effect
 
-        ax.set_xlabel('x coverage')
-        ax.set_ylabel('y coverage')
-        ax.set_zlabel('z coverage')
+        ax.set_xlabel('Cov SVD1')
+        ax.set_ylabel('Cov SVD2')
+        ax.set_zlabel('Cov SVD3')
         if plotColorbar:
             cbar = plt.colorbar(sc, shrink=0.5)
             cbar.ax.tick_params()
@@ -663,7 +673,6 @@ class Bin:
                 ET.plotEllipse(center, radii, rotation, ax=ax, plotAxes=False, cageColor=centroid_color)
 
     def printBin(self, contigNames, covProfiles, contigGCs, contigLengths, isLikelyChimeric, outFormat="summary", separator="\t", stream=sys.stdout):
-        """print(this bin info in csvformat"""
         kvm_str = "%.4f" % self.kValMeanNormPC1
         kvs_str = "%.4f" % self.kValStdevNormPC1
         cvm_str = "%.4f" % self.cValMedian

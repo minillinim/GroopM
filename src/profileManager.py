@@ -25,12 +25,12 @@
 ###############################################################################
 
 
-__author__ = "Michael Imelfort"
-__copyright__ = "Copyright 2012-2020"
-__credits__ = ["Michael Imelfort"]
-__license__ = "GPL3"
-__maintainer__ = "Michael Imelfort"
-__email__ = "michael.imelfort@gmail.com"
+__author__ = 'Michael Imelfort'
+__copyright__ = 'Copyright 2012-2020'
+__credits__ = ['Michael Imelfort']
+__license__ = 'GPL3'
+__maintainer__ = 'Michael Imelfort'
+__email__ = 'michael.imelfort@gmail.com'
 
 ###############################################################################
 
@@ -48,6 +48,9 @@ from scipy.spatial import KDTree as kdt
 from scipy.stats import f_oneway, distributions
 from sklearn.decomposition import TruncatedSVD
 
+import logging
+L = logging.getLogger('groopm')
+
 # GroopM imports
 from .PCA import PCA, Center
 from .mstore import GMDataManager
@@ -58,15 +61,15 @@ from .rainbow import Rainbow
 ###############################################################################
 
 class ProfileManager:
-    """Interacts with the groopm DataManager and local data fields
+    '''Interacts with the groopm DataManager and local data fields
 
     Mostly a wrapper around a group of numpy arrays and a pytables quagmire
-    """
+    '''
     def __init__(self, dbFileName, force=False, scaleFactor=1000):
         # data
         self.dataManager = GMDataManager()  # most data is saved to hdf
         self.dbFileName = dbFileName        # db containing all the data we'd like to use
-        self.condition = ""                 # condition will be supplied at loading time
+        self.condition = ''                 # condition will be supplied at loading time
 
         # --> NOTE: ALL of the arrays in this section are in sync
         # --> each one holds information for an individual contig
@@ -106,8 +109,6 @@ class ProfileManager:
         timer,
         condition,                 # condition as set by another function
         bids=[],                   # if this is set then only load those contigs with these bin ids
-        verbose=True,              # many to some output messages
-        silent=False,              # some to no output messages
         loadCovProfiles=True,
         loadRawKmers=True,
         loadKmerSVDs=True,
@@ -117,71 +118,58 @@ class ProfileManager:
         loadContigGCs=True,
         loadBins=False,
         loadLinks=False):
-        """Load pre-parsed data"""
+        '''Load pre-parsed data'''
 
         timer.getTimeStamp()
-        if(silent):
-            verbose=False
-        if verbose:
-            print("Loading data from:", self.dbFileName)
+        L.info('Loading data from: "%s"' % (self.dbFileName))
 
         try:
             self.numStoits = self.getNumStoits()
             self.condition = condition
             self.indices = self.dataManager.getConditionalIndices(
                 self.dbFileName,
-                condition=condition,
-                silent=silent)
-            if(verbose):
-                print("    Loaded indices with condition:", condition)
+                condition=condition)
             self.numContigs = len(self.indices)
+            L.info('Loaded indices with condition: "%s"' % (condition))
 
             if self.numContigs == 0:
-                print("    ERROR: No contigs loaded using condition:", condition)
+                L.error('ERROR: No contigs loaded using condition: "%s"' % (condition))
                 return
 
-            if(not silent):
-                print("    Working with: %d contigs" % self.numContigs)
+            L.info('Working with: %d contigs' % (self.numContigs))
 
             if(loadCovProfiles):
-                if(verbose):
-                    print("    Loading coverage profiles")
+                L.info('Loading coverage profiles')
                 self.covProfiles = self.dataManager.getCoverageProfiles(self.dbFileName, indices=self.indices)
                 self.normCoverages = self.dataManager.getNormalisedCoverageProfiles(self.dbFileName, indices=self.indices)
                 self.transformedCP = self.dataManager.getTransformedCoverageProfiles(self.dbFileName, indices=self.indices)
                 self.averageCoverages = np.array([sum(i)/self.numStoits for i in self.covProfiles])
 
             if loadRawKmers:
-                if(verbose):
-                    print("    Loading RAW kmer sigs")
+                L.info('Loading RAW kmer sigs')
                 self.kmerSigs = self.dataManager.getKmerSigs(self.dbFileName, indices=self.indices)
 
             if loadKmerSVDs:
-                if(verbose):
-                    print("    Loading SVD kmer sigs")
+                L.info('Loading SVD kmer sigs')
                 self.kmerSVDs = self.dataManager.getKmerSVDs(self.dbFileName, indices=self.indices)
                 self.kmerNormSVD1 = np.copy(self.kmerSVDs[:,0])
                 self.kmerNormSVD1 -= self.kmerNormSVD1.min()
                 self.kmerNormSVD1 /= self.kmerNormSVD1.max()
 
             if(loadContigNames):
-                if(verbose):
-                    print("    Loading contig names")
+                L.info('Loading contig names')
                 self.contigNames = self.dataManager.getContigNames(self.dbFileName, indices=self.indices)
 
             if(loadContigLengths):
                 self.contigLengths = self.dataManager.getContigLengths(self.dbFileName, indices=self.indices)
-                if(verbose):
-                    print("    Loading contig lengths (Total: %d BP)" % ( sum(self.contigLengths) ))
+                L.info('Loading contig lengths (Total: %d BP)' % sum(self.contigLengths) )
 
             if(loadContigGCs):
                 self.contigGCs = self.dataManager.getContigGCs(self.dbFileName, indices=self.indices)
-                if(verbose):
-                    print("    Loading contig GC ratios (Average GC: %0.3f)" % ( np.mean(self.contigGCs) ))
+                L.info('Loading contig GC ratios (Average GC: %0.3f)' % np.mean(self.contigGCs))
 
             if(makeColors):
-                if(verbose):
-                    print("    Creating color map")
+                L.info('Creating color map')
 
                 # use HSV to RGB to generate colors
                 S = 1       # SAT and VAL remain fixed at 1. Reduce to make
@@ -189,8 +177,7 @@ class ProfileManager:
                 self.colorMapGC = self.createColorMapHSV()
 
             if(loadBins):
-                if(verbose):
-                    print("    Loading bin assignments")
+                L.info('Loading bin assignments')
 
                 self.binIds = self.dataManager.getBins(self.dbFileName, indices=self.indices)
 
@@ -225,14 +212,14 @@ class ProfileManager:
             self.stoitColNames = self.getStoitColNames()
 
         except:
-            print("Error loading DB:", self.dbFileName, exc_info()[0])
+            L.error('Error loading DB: %s %s' % (self.dbFileName, exc_info()[0]))
             raise
 
     def reduceIndices(self, deadRowIndices):
-        """purge indices from the data structures
+        '''purge indices from the data structures
 
         Be sure that deadRowIndices are sorted ascending
-        """
+        '''
         # strip out the other values
         self.indices = np.delete(self.indices, deadRowIndices, axis=0)
         self.covProfiles = np.delete(self.covProfiles, deadRowIndices, axis=0)
@@ -248,76 +235,76 @@ class ProfileManager:
 # GET / SET
 
     def getNumStoits(self):
-        """return the value of numStoits in the metadata tables"""
+        '''return the value of numStoits in the metadata tables'''
         return self.dataManager.getNumStoits(self.dbFileName)
 
     def getMerColNames(self):
-        """return the value of merColNames in the metadata tables"""
+        '''return the value of merColNames in the metadata tables'''
         return self.dataManager.getMerColNames(self.dbFileName)
 
     def getMerSize(self):
-        """return the value of merSize in the metadata tables"""
+        '''return the value of merSize in the metadata tables'''
         return self.dataManager.getMerSize(self.dbFileName)
 
     def getNumMers(self):
-        """return the value of numMers in the metadata tables"""
+        '''return the value of numMers in the metadata tables'''
         return self.dataManager.getNumMers(self.dbFileName)
 
     def getNumBins(self):
-        """return the value of numBins in the metadata tables"""
+        '''return the value of numBins in the metadata tables'''
         return self.dataManager.getNumBins(self.dbFileName)
 
     def setNumBins(self, numBins):
-        """set the number of bins"""
+        '''set the number of bins'''
         self.dataManager.setNumBins(self.dbFileName, numBins)
 
     def getStoitColNames(self):
-        """return the value of stoitColNames in the metadata tables"""
-        return np.array(self.dataManager.getStoitColNames(self.dbFileName).split(","))
+        '''return the value of stoitColNames in the metadata tables'''
+        return np.array(self.dataManager.getStoitColNames(self.dbFileName).split(','))
 
     def isClustered(self):
-        """Has the data been clustered already"""
+        '''Has the data been clustered already'''
         return self.dataManager.isClustered(self.dbFileName)
 
     def setClustered(self):
-        """Save that the db has been clustered"""
+        '''Save that the db has been clustered'''
         self.dataManager.setClustered(self.dbFileName, True)
 
     def isComplete(self):
-        """Has the data been *completely* clustered already"""
+        '''Has the data been *completely* clustered already'''
         return self.dataManager.isComplete(self.dbFileName)
 
     def setComplete(self):
-        """Save that the db has been completely clustered"""
+        '''Save that the db has been completely clustered'''
         self.dataManager.setComplete(self.dbFileName, True)
 
     def getBinStats(self):
-        """Go through all the "bins" array and make a list of unique bin ids vs number of contigs"""
+        '''Go through all the "bins" array and make a list of unique bin ids vs number of contigs'''
         return self.dataManager.getBinStats(self.dbFileName)
 
     def setBinStats(self, binStats):
-        """Store the valid bin Ids and number of members
+        '''Store the valid bin Ids and number of members
 
         binStats is a list of tuples which looks like:
         [ (bid, numMembers, isLikelyChimeric) ]
         Note that this call effectively nukes the existing table
-        """
+        '''
         self.dataManager.setBinStats(self.dbFileName, binStats)
         self.setNumBins(len(binStats))
 
     def setBinAssignments(self, assignments, nuke=False):
-        """Save our bins into the DB"""
+        '''Save our bins into the DB'''
         self.dataManager.setBinAssignments(
             self.dbFileName,
             assignments,
             nuke=nuke)
 
     def loadLinks(self):
-        """Extra wrapper 'cause I am dumb"""
+        '''Extra wrapper 'cause I am dumb'''
         self.links = self.getLinks()
 
     def getLinks(self):
-        """Get contig links"""
+        '''Get contig links'''
         # first we get the absolute links
         absolute_links = self.dataManager.restoreLinks(self.dbFileName, self.indices)
         # now convert this into plain old row_indices
@@ -342,14 +329,14 @@ class ProfileManager:
 # DATA TRANSFORMATIONS
 
     def getAverageCoverage(self, rowIndex):
-        """Return the average coverage for this contig across all stoits"""
+        '''Return the average coverage for this contig across all stoits'''
         return sum(self.transformedCP[rowIndex])/self.numStoits
 
 #------------------------------------------------------------------------------
 # DEBUG CRUFT
 
     def rewriteBins(self):
-        """rewrite the bins table in hdf5 based on numbers in meta-contigs"""
+        '''rewrite the bins table in hdf5 based on numbers in meta-contigs'''
         bins = self.dataManager.getBins(self.dbFileName)
         bin_store = {}
         for c in bins:
@@ -438,29 +425,43 @@ class ProfileManager:
             self.colorMapGC = LinearSegmentedColormap.from_list('GC_DISCRETE', discrete_map, N=20)
 
     def plotUnbinned(self, timer, coreCut, ignoreContigLengths=False):
-        """Plot all contigs over a certain length which are unbinned"""
-        self.loadData(timer, "((length >= "+str(coreCut)+") & (bid == 0))")
+        '''Plot all contigs over a certain length which are unbinned'''
+        self.loadData(timer, '((length >= %s) & (bid == 0))' % (str(coreCut)))
         fig = plt.figure()
         ax1 = fig.add_subplot(111, projection='3d')
         if ignoreContigLengths:
-            sc = ax1.scatter(self.transformedCP[:,0], self.transformedCP[:,1], self.transformedCP[:,2], edgecolors='none', c=self.contigGCs, cmap=self.colorMapGC, vmin=0.0, vmax=1.0, s=10, marker='.')
+            edgecolors='none'
+            s=10
         else:
-            sc = ax1.scatter(self.transformedCP[:,0], self.transformedCP[:,1], self.transformedCP[:,2], edgecolors='k', c=self.contigGCs, cmap=self.colorMapGC, vmin=0.0, vmax=1.0, s=np.sqrt(self.contigLengths), marker='.')
+            edgecolors='k'
+            s=np.sqrt(self.contigLengths)
+
+        sc = ax1.scatter(
+            self.transformedCP[:,0],
+            self.transformedCP[:,1],
+            self.transformedCP[:,2],
+            edgecolors=edgecolors,
+            c=self.contigGCs,
+            cmap=self.colorMapGC,
+            vmin=0.0,
+            vmax=1.0,
+            s=s,
+            marker='.')
         sc.set_edgecolors = sc.set_facecolors = lambda *args:None  # disable depth transparency effect
 
         try:
             plt.show()
             plt.close(fig)
         except:
-            print("Error showing image", exc_info()[0])
+            L.error('Error showing image: %s' % (exc_info()[0]))
             raise
         del fig
 
     def plotAll(self, timer, coreCut, ignoreContigLengths=False):
-        """Plot all contigs over a certain length which are unbinned"""
+        '''Plot all contigs over a certain length which are unbinned'''
         self.loadData(
             timer,
-            "((length >= "+str(coreCut)+"))",
+            '((length >= ))' % (str(coreCut)),
             loadRawKmers=False,
             loadContigNames=False,
             loadContigLengths=False,
@@ -471,11 +472,7 @@ class ProfileManager:
 
         coloring = [int(i) for i in self.kmerSVDs[:,0] * 100]
 
-        print(np.min(coloring), np.max(coloring))
         rainbow = Rainbow(np.min(coloring), np.max(coloring), 100, type='rgb')
-
-        # import code
-        # code.interact(local=locals())
 
         ax = plt.subplot(111)
         Xs = range(len(self.stoitColNames)-2)
@@ -514,10 +511,10 @@ class ProfileManager:
         non_zero_zs = list(range(len(self.transformedCP[:,0])))#np.where(self.transformedCP[:,2] > 500)[0]
 
     def _plotAll(self, timer, coreCut, ignoreContigLengths=False):
-        """Plot all contigs over a certain length which are unbinned"""
+        '''Plot all contigs over a certain length which are unbinned'''
         self.loadData(
             timer,
-            "((length >= "+str(coreCut)+"))",
+            '((length >= ))' % (str(coreCut)),
             loadRawKmers=False,
             loadContigNames=False)
 
@@ -553,7 +550,7 @@ class ProfileManager:
 
         cbar = plt.colorbar(sc, shrink=0.5)
         cbar.ax.tick_params()
-        cbar.ax.set_title("% GC", size=10)
+        cbar.ax.set_title('% GC', size=10)
         cbar.set_ticks([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
         cbar.ax.set_ylim([0.15, 0.85])
         mungeCbar(cbar)
@@ -570,18 +567,18 @@ class ProfileManager:
             plt.show()
             plt.close(fig)
         except:
-            print("Error showing image", exc_info()[0])
+            L.error('Error showing image %s' % (exc_info()[0]))
             raise
         del fig
 
-    def plotTransViews(self, tag="fordens"):
-        """Plot top, side and front views of the transformed data"""
-        self.renderTransData(tag+"_top.png",azim = 0, elev = 90)
-        self.renderTransData(tag+"_front.png",azim = 0, elev = 0)
-        self.renderTransData(tag+"_side.png",azim = 90, elev = 0)
+    def plotTransViews(self, tag='fordens'):
+        '''Plot top, side and front views of the transformed data'''
+        self.renderTransData('%s_top.png' % (tag), azim = 0, elev = 90)
+        self.renderTransData('%s_front.png' % (tag), azim = 0, elev = 0)
+        self.renderTransData('%s_side.png' % (tag), azim = 90, elev = 0)
 
     def renderTransCPData(self,
-                          fileName="",
+                          fileName='',
                           show=True,
                           elev=45,
                           azim=45,
@@ -596,7 +593,7 @@ class ProfileManager:
                           restrictedBids=[],
                           alpha=1,
                           ignoreContigLengths=False):
-        """Plot transformed data in 3D"""
+        '''Plot transformed data in 3D'''
         del_fig = False
         if(fig is None):
             fig = plt.figure()
@@ -679,7 +676,6 @@ class ProfileManager:
             ax = fig.add_subplot(111, projection='3d')
             if len(restrictedBids) == 0:
                 if highlight is None:
-                    print("BF:", np.shape(self.transformedCP))
                     if ignoreContigLengths:
                         sc = ax.scatter(self.transformedCP[:,0],
                                    self.transformedCP[:,1],
@@ -705,7 +701,7 @@ class ProfileManager:
                     sc.set_edgecolors = sc.set_facecolors = lambda *args:None # disable depth transparency effect
                 else:
                     #draw the opaque guys first
-                    """
+                    '''
                     sc = ax.scatter(self.transformedCP[:,0],
                                     self.transformedCP[:,1],
                                     self.transformedCP[:,2],
@@ -718,7 +714,7 @@ class ProfileManager:
                                     marker='s',
                                     alpha=alpha)
                     sc.set_edgecolors = sc.set_facecolors = lambda *args:None # disable depth transparency effect
-                    """
+                    '''
                     # now replot the highlighted guys
                     disp_vals = np.array([])
                     disp_GCs = np.array([])
@@ -773,12 +769,10 @@ class ProfileManager:
                                     marker='.')
                     sc.set_edgecolors = sc.set_facecolors = lambda *args:None # disable depth transparency effect
 
-                    print(np.shape(disp_vals), np.shape(hide_vals), np.shape(self.transformedCP))
-
                 # render color bar
                 cbar = plt.colorbar(sc, shrink=0.5)
                 cbar.ax.tick_params()
-                cbar.ax.set_title("% GC", size=10)
+                cbar.ax.set_title('% GC', size=10)
                 cbar.set_ticks([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
                 cbar.ax.set_ylim([0.15, 0.85])
                 mungeCbar(cbar)
@@ -792,7 +786,6 @@ class ProfileManager:
                         r_cols = np.append(r_cols, self.contigGCs[i])
                         num_added += 1
                 r_trans = np.reshape(r_trans, (num_added,3))
-                print(np.shape(r_trans))
                 #r_cols = np.reshape(r_cols, (num_added,3))
                 sc = ax.scatter(r_trans[:,0],
                                 r_trans[:,1],
@@ -809,7 +802,7 @@ class ProfileManager:
                 # render color bar
                 cbar = plt.colorbar(sc, shrink=0.5)
                 cbar.ax.tick_params()
-                cbar.ax.set_title("% GC", size=10)
+                cbar.ax.set_title('% GC', size=10)
                 cbar.set_ticks([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
                 cbar.ax.set_ylim([0.15, 0.85])
                 mungeCbar(cbar)
@@ -828,7 +821,7 @@ class ProfileManager:
             if(not showAxis):
                 ax.set_axis_off()
 
-        if(fileName != ""):
+        if(fileName != ''):
             try:
                 if(all):
                     fig.set_size_inches(3*primaryWidth+2*primarySpace,primaryWidth)
@@ -836,13 +829,13 @@ class ProfileManager:
                     fig.set_size_inches(primaryWidth,primaryWidth)
                 plt.savefig(fileName,dpi=dpi,format=format)
             except:
-                print("Error saving image",fileName, exc_info()[0])
+                L.error('Error saving image: %s %s' % (fileName, exc_info()[0]))
                 raise
         elif(show):
             try:
                 plt.show()
             except:
-                print("Error showing image", exc_info()[0])
+                L.error('Error showing image: %s' % (exc_info()[0]))
                 raise
         if del_fig:
             plt.close(fig)
@@ -861,14 +854,14 @@ class ProfileManager:
                           ignoreContigLengths=False,
                           elev=45,
                           azim=45,
-                          fileName="",
+                          fileName='',
                           dpi=300,
                           format='png',
                           primaryWidth=6,
-                          title="",
+                          title='',
                           showAxis=False,
                           showColorbar=True,):
-        """Plot transformed data in 3D"""
+        '''Plot transformed data in 3D'''
         # clear any existing plot
         plt.clf()
         ax = fig.add_subplot(111, projection='3d')
@@ -920,7 +913,7 @@ class ProfileManager:
         if showColorbar:
             cbar = plt.colorbar(sc, shrink=0.5)
             cbar.ax.tick_params()
-            cbar.ax.set_title("% GC", size=10)
+            cbar.ax.set_title('% GC', size=10)
             cbar.set_ticks([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
             cbar.ax.set_ylim([0.15, 0.85])
             mungeCbar(cbar)
@@ -942,24 +935,24 @@ class ProfileManager:
 
         plt.tight_layout()
 
-        if title != "":
+        if title != '':
             plt.title(title)
 
         if(not showAxis):
             ax.set_axis_off()
 
-        if(fileName != ""):
+        if(fileName != ''):
             try:
                 fig.set_size_inches(primaryWidth,primaryWidth)
                 plt.savefig(fileName,dpi=dpi,format=format)
             except:
-                print("Error saving image",fileName, exc_info()[0])
+                L.error('Error saving image: %s %s' % (fileName, exc_info()[0]))
                 raise
         else:
             try:
                 plt.show()
             except:
-                print("Error showing image", exc_info()[0])
+                L.error('Error showing image: %s' % (exc_info()[0]))
                 raise
 
 ###############################################################################
